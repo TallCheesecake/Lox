@@ -1,8 +1,7 @@
+pub use cursor::Cursor;
 use std::fmt::{self};
 mod cursor;
-pub use cursor::Cursor;
 #[derive(PartialEq, Debug, Clone, Copy)]
-
 pub struct Token<'de> {
     pub t: TokenItem,
     pub original_string: &'de str,
@@ -22,7 +21,6 @@ pub fn is_whitespace(c: char) -> bool {
     match c {
         //tab and space respectivly
         '\u{0009}' | ' ' => return true,
-
         _ => return false,
     }
 }
@@ -53,10 +51,10 @@ pub enum TokenItem {
     Iden,
     String,
     Number(f64), //above is combos, strings, User identofiers, and numbers
-    And,
     Class,
     Else,
     False,
+    And,
     Fun,
     For,
     If,
@@ -72,49 +70,73 @@ pub enum TokenItem {
     Eof,
     //above is Keywords
 }
-impl Cursor<'_> {
-    // Parses a token from the input string.
-    pub fn advance_token(&mut self) -> Token<'_> {
+
+impl<'a> Cursor<'a> {
+    pub fn advance_token(&mut self) -> Result<Token<'a>, ()> {
+        //will catch if we reach EOF
         let Some(first_char) = self.bump() else {
-            return Token::new(TokenItem::Eof, "\0", 0);
+            return Ok(Token::new(TokenItem::Eof, "\0", 1));
         };
-        pub fn literal_token_create(t: TokenItem, original_string: &str) -> Token {
-            Token {
-                t,
-                original_string,
-                len: 4,
-            }
+
+        //this is for being able to get the string for literal token creation
+        let start = self.length_consumed();
+
+        while is_whitespace(first_char) {
+            self.bump();
         }
 
+        //matched through first state
         let token_kind = match first_char {
-            '(' => final_token(TokenItem::LeftParen),
-            ')' => final_token(TokenItem::RightParen),
-            '{' => final_token(TokenItem::LeftBrace),
-            '}' => final_token(TokenItem::RightBrace),
-            ',' => final_token(TokenItem::Comma),
-            '.' => final_token(TokenItem::Dot),
-            '-' => final_token(TokenItem::Minus),
-            '+' => final_token(TokenItem::Plus),
-            ';' => final_token(TokenItem::Semicolon),
-            '*' => final_token(TokenItem::Star),
-            'a'..='z' | '_' | 'A'..='Z' => SecondState::Iden,
-            '<' => SecondState::LessEqual,
-            '!' => SecondState::BangEqual,
-            '=' => SecondState::EqualEqual,
-            '>' => SecondState::GreaterEqual,
-            '"' => SecondState::String,
-            c if c.is_whitespace() => continue,
+            '(' => self.literal_token_create(TokenItem::LeftParen),
+            // ')' => final_token(TokenItem::RightParen),
+            // '{' => final_token(TokenItem::LeftBrace),
+            // '}' => final_token(TokenItem::RightBrace),
+            // ',' => final_token(TokenItem::Comma),
+            // '.' => final_token(TokenItem::Dot),
+            // '-' => final_token(TokenItem::Minus),
+            // '+' => final_token(TokenItem::Plus),
+            // ';' => final_token(TokenItem::Semicolon),
+            // '*' => final_token(TokenItem::Star),
+            // 'a'..='z' | '_' | 'A'..='Z' => SecondState::Iden,
+            // '<' => SecondState::LessEqual,
+            // '!' => SecondState::BangEqual,
+            // '=' => SecondState::EqualEqual,
+            // '>' => SecondState::GreaterEqual,
+            // '"' => SecondState::String,
+            '0'..='9' => self.number_lex(),
+            // c if c.is_whitespace() => continue,
             x => {
-                return Some(Err(println!("error at {x}")));
+                return Err(());
             }
         };
+        Err(())
     }
-    pub fn number_lex(&mut self) -> Token {
-        let mut c = self.first();
-        match c {
-            //NOTE: add a c.is_valid_number()
-            '0'..='9' => while self.first() != '.' {},
+    pub fn literal_token_create(&mut self, t: TokenItem) -> Result<Token<'a>, ()> {
+        Ok(Token::new(
+            t,
+            &self.input[self.length_consumed()..self.len_remaining],
+            self.chars.as_str().len(),
+        ))
+    }
+    pub fn number_lex(&mut self) -> Result<Token<'a>, ()> {
+        let numeric_token_create = |input: &'a str| -> Result<Token<'a>, ()> {
+            match input.parse::<f64>() {
+                Ok(n) => Ok(Token::new(TokenItem::Number(n), input, 4)),
+                Err(_) => Err(()), // placeholder error
+            }
+        };
+        let mut seen = false;
+        while let Some(c) = self.current() {
+            if self.first().is_ascii_digit() {
+                self.bump();
+            } else if c == '.' && !seen && !self.second().is_ascii_digit() {
+                seen = true;
+                self.bump();
+            } else {
+                break;
+            }
         }
+        numeric_token_create(&self.input[self.length_consumed()..self.len_remaining])
     }
 }
 
@@ -163,48 +185,5 @@ impl<'de> fmt::Display for Token<'_> {
             TokenItem::Iden => write!(f, "token: {origin} todo!()"),
             TokenItem::String => write!(f, "token: {origin} todo!()"),
         }
-    }
-}
-
-pub struct Lexer<'de> {
-    len_remaining: &'de str,
-    // whole: &'de str,
-    byte: usize,
-}
-impl<'de> Lexer<'de> {
-    pub fn new(input: &'de str) -> Self {
-        Self {
-            len_remaining: input,
-            byte: 0,
-        }
-    }
-}
-
-impl<'de> Iterator for Lexer<'de> {
-    type Item = Result<Token<'de>, error::Error>;
-    fn next(&mut self) -> Option<Self::Item> {
-        //we assign the entirety of the char stream
-        // enum SecondState {
-        //     Iden,
-        //     Number,
-        //     BangEqual,
-        //     EqualEqual,
-        //     GreaterEqual,
-        //     LessEqual,
-        //     String,
-        // }
-        //
-        let mut chars = self.len_remaining.chars();
-        loop {
-            let c = chars.next()?;
-            let c_output_string = &self.len_remaining[..c.len_utf8()];
-            let c_cont = self.len_remaining;
-            self.len_remaining = chars.as_str();
-            self.byte += c.len_utf8();
-            let state1 = match c {};
-
-            break match state1 {};
-        }
-        None
     }
 }

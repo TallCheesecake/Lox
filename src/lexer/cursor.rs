@@ -1,32 +1,54 @@
 use std::str::Chars;
 pub struct Cursor<'a> {
-    len_remaining: usize,
-    chars: Chars<'a>,
+    pub len_remaining: usize,
+    pub input: &'a str,
+    pub chars: Chars<'a>,
 }
 impl<'a> Cursor<'a> {
     pub fn new(input_string: &'a str) -> Self {
         Cursor {
             len_remaining: input_string.len(),
+            input: input_string,
             chars: input_string.chars(),
         }
     }
     //returns the amount of the token consumed
     pub fn length_consumed(&self) -> usize {
-        self.chars.as_str().len() - self.len_remaining
+        self.input.len() - self.len_remaining
     }
-    //the rust lexer just clones it I dont see how thats ok since cursor can litteraly be the
-    //whole input string
     pub fn next_char_in_token(&mut self) -> char {
         self.chars.next().unwrap_or('\0')
     }
-    //this is heavily inspired by the rustc_lexer ad you can tell
-    pub fn bump(&mut self) -> Option<char> {
-        self.chars.next()
+    fn len_remaining_update(&mut self) {
+        self.len_remaining = self.chars.as_str().len();
     }
-    //this function is meant the search until you find a char in a &str
-    pub fn eat_until() {
-        todo!();
-        //i wanna try and impl the way memchr::memchr search does it
+    //this is heavily inspired by the rustc_lexer if you can't tell
+    pub fn bump(&mut self) -> Option<char> {
+        let temp = self.chars.next();
+        self.len_remaining_update();
+        temp
+    }
+
+    pub fn eof(&mut self) -> bool {
+        match self.bump() {
+            Some(_) => false,
+            None => true,
+        }
+    }
+    pub fn current(&mut self) -> Option<char> {
+        let result = &self.input[self.len_remaining..];
+        //NOTE: the first call to next effectivly indexes into the iterator
+        result.chars().next()
+    }
+    //eat while a pred holds so like if F taking a char is true then call bump
+    pub fn eat_while(&mut self, f: impl Fn(char) -> bool) {
+        while let Some(c) = self.current() {
+            if f(c) {
+                self.bump();
+            } else {
+                break;
+            }
+        }
     }
     pub fn third(&self) -> char {
         let mut temp = self.chars.clone();
@@ -44,7 +66,6 @@ impl<'a> Cursor<'a> {
     //NOTE: since cloning a char iterator is only a pointer into a STR you only clone the iterator body
     //which comes out to about 2 words
     pub fn first(&self) -> char {
-        //TODO: change return error type
         self.chars.clone().next().unwrap_or('e')
     }
 }

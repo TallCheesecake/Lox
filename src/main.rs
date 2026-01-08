@@ -2,11 +2,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 mod lexer;
-
 fn main() {
     live_input()
 }
-
 fn live_input() {
     loop {
         print!("> ");
@@ -21,7 +19,7 @@ fn live_input() {
 }
 
 fn run(input: String) {
-    let mut lex = lexer::Lexer::new(input.as_str());
+    let mut lex = Cursor::new(input.as_str());
     if let Some(ref x) = lex.next() {
         match x {
             Ok(token) => println!("{token}"),
