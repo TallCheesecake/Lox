@@ -1,4 +1,6 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::str::Chars;
 #[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 
@@ -59,6 +61,12 @@ pub struct Token<'a> {
     pub lexeme: &'a str,
 }
 
+impl<'a> Display for Token<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.lexeme)
+    }
+}
+
 impl<'a> Token<'a> {
     pub fn default(text: &'a str) -> Token<'a> {
         Token {
@@ -70,13 +78,12 @@ impl<'a> Token<'a> {
 }
 
 pub struct Scanner<'a> {
-    keywords: HashMap<&'static str, TokenType>,
+    keywords: HashMap<&'a str, TokenType>,
     code: &'a str,
-    start: usize,
+    end: usize,
     chars: Chars<'a>,
     line: usize,
 }
-
 impl<'a> Scanner<'a> {
     pub fn new(code: &'a str) -> Scanner {
         let mut keywords = HashMap::with_capacity(16);
@@ -100,87 +107,116 @@ impl<'a> Scanner<'a> {
         Scanner {
             keywords,
             code,
-            start: 0,
+            end: 0,
             chars: code.chars(),
             line: 1,
         }
     }
-    pub fn generator(&mut self) -> Token<'a> {
+    pub fn generator(&mut self) -> Option<Token<'a>> {
         pub enum ThirdState {
-            //I GOT THIS FROM Jon's impl rust this is very smart
-            OrEquals(char),
+            OrEquals,
             String,
             Number,
-            Iden(char),
+            Iden,
             Invalid,
         }
-
-        let generate = |kind: TokenType, line: usize, lexeme: &'a str| -> Token<'a> {
-            Token { kind, line, lexeme }
+        println!("----------");
+        println!("{}, {} ", self.chars.as_str(), self.code);
+        let generate = |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Token<'a>> {
+            println!("lexeme: {:?}", lexeme);
+            Some(Token { kind, line, lexeme })
         };
-        //resets start
-        self.start = self.chars.as_str().len();
-        self.trim_whitespace();
-
+        let counter: usize = 0;
+        self.end = self.chars.as_str().len();
+        self.chars = self.chars.as_str().trim_start().chars();
+        println!("----------");
+        println!("post sanitaiton: {}, {} ", self.chars.as_str(), self.code);
         let c = self.current();
+        println!("we have called current: and gotten: {}", c);
         let third_state = match c {
-            // '(' => return generate(TokenType::LeftParen, 0, self.lexeme()),
-            // ')' => return generate(TokenType::RightParen),
-            // '{' => return generate(TokenType::LeftBrace),
-            // '}' => return generate(TokenType::RightBrace),
-            // ';' => return generate(TokenType::Semicolon),
-            // ',' => return generate(TokenType::Comma),
-            // '.' => return generate(TokenType::Dot),
-            // '-' => return generate(TokenType::Minus),
-            // '+' => return generate(TokenType::Plus),
-            // '/' => return generate(TokenType::Slash),
-            // '*' => return generate(TokenType::Star),
-            '!' | '=' | '<' | '>' => ThirdState::OrEquals(c),
-            'A'..='Z' | 'a'..='z' => ThirdState::Iden(c),
+            '(' => return generate(TokenType::LeftParen, counter, self.lexeme()),
+            ')' => return generate(TokenType::RightParen, counter, self.lexeme()),
+            '{' => return generate(TokenType::LeftBrace, counter, self.lexeme()),
+            '}' => return generate(TokenType::RightBrace, counter, self.lexeme()),
+            ';' => return generate(TokenType::Semicolon, counter, self.lexeme()),
+            ',' => return generate(TokenType::Comma, counter, self.lexeme()),
+            '.' => return generate(TokenType::Dot, counter, self.lexeme()),
+            '-' => return generate(TokenType::Minus, counter, self.lexeme()),
+            '+' => return generate(TokenType::Plus, counter, self.lexeme()),
+            '/' => return generate(TokenType::Slash, counter, self.lexeme()),
+            '*' => return generate(TokenType::Star, counter, self.lexeme()),
+            '!' | '=' | '<' | '>' => ThirdState::OrEquals,
+            'A'..='Z' | 'a'..='z' => ThirdState::Iden,
             '0'..='9' => ThirdState::Number,
             '"' => ThirdState::String,
             _ => ThirdState::Invalid,
         };
         match third_state {
-            ThirdState::OrEquals(c) => {
-                return {
-                    if let Some(x) = self.bump() {
-                        match x {
-                            // '<' => return { generate(TokenType::LessEqual) },
-                            // '>' => return { generate(TokenType::GreaterEqual) },
-                            // '!' => return { generate(TokenType::BangEqual) },
-                            // '=' => return { generate(TokenType::EqualEqual) },
+            ThirdState::OrEquals => {
+                //NOTE: there is a much easirer way to do this !!!
+                if let Some(x) = self.bump() {
+                    match x {
+                        '<' => {
+                            return { generate(TokenType::LessEqual, counter, self.lexeme()) };
                         }
-                    } else {
-                        todo!();
+                        '>' => {
+                            return { generate(TokenType::GreaterEqual, counter, self.lexeme()) };
+                        }
+                        '!' => {
+                            return { generate(TokenType::BangEqual, counter, self.lexeme()) };
+                        }
+                        '=' => {
+                            return { generate(TokenType::EqualEqual, counter, self.lexeme()) };
+                        }
+                        _ => {}
                     }
-                };
+                }
+                // return Some(Token::default(self.lexeme()));
             }
-            ThirdState::String => todo!(),
+            ThirdState::String => {
+                if let Some(_) = self.chars.find(|&x| x != '"') {
+                    generate(TokenType::String, self.line, self.lexeme());
+                } else {
+                    //i dont think this is technacly correct
+                    generate(TokenType::String, self.line, self.lexeme());
+                }
+            }
             ThirdState::Number => todo!(),
-            ThirdState::Iden(c) => {
-                while let Some(x) = self.chars.as_str().chars().next() {
+            ThirdState::Iden => {
+                //Views the underlying data as a subslice of the original data.
+                // let start = self.chars.as_str().chars();
+                // I belive that we already call next for c
+                while let Some(x) = self.chars.next() {
+                    if !x.is_ascii_alphabetic() {
+                        break;
+                    }
                     self.bump();
                 }
-                if let Some(c) = self.keywords.get_mut(&(self.lexeme())) {
-                    return generate(*c);
+                let index = self.lexeme();
+                if let Some(c) = self.keywords.get_mut(&(index)) {
+                    return generate(*c, counter, self.lexeme());
                 } else {
                     {}
                 }
-                return Token::default(self.lexeme());
+                return Some(Token::default(self.lexeme()));
             }
             ThirdState::Invalid => todo!(),
         };
+        None
     }
-
     fn trim_whitespace(&mut self) {
         while matches!(self.current(), '\u{0009}' | '\u{0020}') {
-            self.bump();
+            self.chars = self.chars.as_str().trim_start().chars();
         }
     }
 
     fn lexeme(&mut self) -> &'a str {
-        &self.code[self.start..(self.code.len() - self.chars.as_str().len())]
+        println!(
+            "method lexeme: {:?}",
+            //dont ask me abt the -1 at the self.end ...
+            &self.code[(self.code.len() - self.chars.as_str().len() - 1)..self.end - 1]
+        );
+        &self.code[(self.code.len() - self.chars.as_str().len() - 1)..self.end - 1]
     }
 
     fn current(&mut self) -> char {
@@ -191,8 +227,27 @@ impl<'a> Scanner<'a> {
         self.chars.next()
     }
     fn second(&self) -> char {
-        let mut temp = self.code.clone().chars();
+        let mut temp = self.code.chars();
         temp.next();
         temp.next().unwrap_or('0')
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unit_it_works_char() {
+        let mut result = Scanner::new("({");
+        if let Some(x) = result.generator() {
+            assert_eq!(x.kind, TokenType::LeftParen);
+            assert_eq!(x.lexeme, "(")
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn expensive_test() {
+        // code that takes an hour to run
     }
 }
