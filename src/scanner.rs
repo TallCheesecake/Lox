@@ -2,8 +2,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::Chars;
-#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 
+#[derive(Eq, PartialEq, Debug, Copy, Clone, Hash)]
 pub enum TokenType {
     LeftParen,
     RightParen,
@@ -84,6 +84,7 @@ pub struct Scanner<'a> {
     chars: Chars<'a>,
     line: usize,
 }
+
 impl<'a> Scanner<'a> {
     pub fn new(code: &'a str) -> Scanner {
         let mut keywords = HashMap::with_capacity(16);
@@ -112,6 +113,7 @@ impl<'a> Scanner<'a> {
             line: 1,
         }
     }
+
     pub fn generator(&mut self) -> Option<Token<'a>> {
         pub enum ThirdState {
             OrEquals,
@@ -121,18 +123,34 @@ impl<'a> Scanner<'a> {
             Invalid,
         }
         println!("----------");
-        println!("{}, {} ", self.chars.as_str(), self.code);
+        println!(
+            "self.chars.as_str before current is called: {}",
+            self.chars.as_str()
+        );
         let generate = |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Token<'a>> {
             println!("lexeme: {:?}", lexeme);
             Some(Token { kind, line, lexeme })
         };
         let counter: usize = 0;
+        let temp = self.chars.as_str().trim_start().chars();
+        //the problem is that the next mutation will step forward one time and when chars.as_str()
+        //is called the chars will be "one ahead"
+
         self.end = self.chars.as_str().len();
-        self.chars = self.chars.as_str().trim_start().chars();
+        println!(
+            "self.chars.as_str before next is called: {}",
+            self.chars.as_str()
+        );
         println!("----------");
-        println!("post sanitaiton: {}, {} ", self.chars.as_str(), self.code);
-        let c = self.current();
+        let c = self.chars.next().unwrap_or('0');
         println!("we have called current: and gotten: {}", c);
+        println!(
+            "temp as str after current is called and reassignment happens: {}",
+            temp.as_str()
+        );
+
+        // self.chars = temp;
+
         let third_state = match c {
             '(' => return generate(TokenType::LeftParen, counter, self.lexeme()),
             ')' => return generate(TokenType::RightParen, counter, self.lexeme()),
@@ -157,16 +175,16 @@ impl<'a> Scanner<'a> {
                 if let Some(x) = self.bump() {
                     match x {
                         '<' => {
-                            return { generate(TokenType::LessEqual, counter, self.lexeme()) };
+                            return generate(TokenType::LessEqual, counter, self.lexeme());
                         }
                         '>' => {
-                            return { generate(TokenType::GreaterEqual, counter, self.lexeme()) };
+                            return generate(TokenType::GreaterEqual, counter, self.lexeme());
                         }
                         '!' => {
-                            return { generate(TokenType::BangEqual, counter, self.lexeme()) };
+                            return generate(TokenType::BangEqual, counter, self.lexeme());
                         }
                         '=' => {
-                            return { generate(TokenType::EqualEqual, counter, self.lexeme()) };
+                            return generate(TokenType::EqualEqual, counter, self.lexeme());
                         }
                         _ => {}
                     }
@@ -183,20 +201,18 @@ impl<'a> Scanner<'a> {
             }
             ThirdState::Number => todo!(),
             ThirdState::Iden => {
-                //Views the underlying data as a subslice of the original data.
-                // let start = self.chars.as_str().chars();
-                // I belive that we already call next for c
                 while let Some(x) = self.chars.next() {
                     if !x.is_ascii_alphabetic() {
                         break;
                     }
-                    self.bump();
                 }
+
                 let index = self.lexeme();
+                println!("index: {} ", index);
                 if let Some(c) = self.keywords.get_mut(&(index)) {
                     return generate(*c, counter, self.lexeme());
                 } else {
-                    {}
+                    { eprintln!("not in hash") }
                 }
                 return Some(Token::default(self.lexeme()));
             }
@@ -204,6 +220,7 @@ impl<'a> Scanner<'a> {
         };
         None
     }
+
     fn trim_whitespace(&mut self) {
         while matches!(self.current(), '\u{0009}' | '\u{0020}') {
             self.chars = self.chars.as_str().trim_start().chars();
@@ -213,9 +230,11 @@ impl<'a> Scanner<'a> {
     fn lexeme(&mut self) -> &'a str {
         println!(
             "method lexeme: {:?}",
-            //dont ask me abt the -1 at the self.end ...
             &self.code[(self.code.len() - self.chars.as_str().len() - 1)..self.end - 1]
         );
+        println!("len {:?}", self.code.len());
+        println!("char from as_str {:?}", self.chars.as_str());
+        println!("as str {:?}", self.chars.as_str().len());
         &self.code[(self.code.len() - self.chars.as_str().len() - 1)..self.end - 1]
     }
 
@@ -226,6 +245,7 @@ impl<'a> Scanner<'a> {
     fn bump(&mut self) -> Option<char> {
         self.chars.next()
     }
+
     fn second(&self) -> char {
         let mut temp = self.code.chars();
         temp.next();
@@ -242,6 +262,15 @@ mod tests {
         if let Some(x) = result.generator() {
             assert_eq!(x.kind, TokenType::LeftParen);
             assert_eq!(x.lexeme, "(")
+        }
+    }
+
+    #[test]
+    fn unit_iden() {
+        let mut result = Scanner::new(",AAA");
+        if let Some(x) = result.generator() {
+            assert_eq!(x.kind, TokenType::Comma);
+            assert_eq!(x.lexeme, ",")
         }
     }
 
