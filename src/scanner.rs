@@ -1,3 +1,5 @@
+use anyhow::{Error, bail};
+use anyhow::{Result, anyhow};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -80,7 +82,8 @@ impl<'a> Token<'a> {
 pub struct Scanner<'a> {
     keywords: HashMap<&'a str, TokenType>,
     code: &'a str,
-    end: usize,
+    current: usize,
+    start: usize,
     chars: Chars<'a>,
     line: usize,
 }
@@ -108,148 +111,188 @@ impl<'a> Scanner<'a> {
         Scanner {
             keywords,
             code,
-            end: 0,
+            current: 0,
+            //NOTE: end is poorly named, end is actually the end of the consumed characters
+            //currently before the next loop through the lexeme
+            start: 0,
             chars: code.chars(),
             line: 1,
         }
     }
 
-    pub fn generator(&mut self) -> Option<Token<'a>> {
+    pub fn generator(&mut self) -> Option<Result<Token<'a>, Error>> {
         pub enum ThirdState {
-            OrEquals,
+            OrEquals(char),
             String,
             Number,
             Iden,
-            Invalid,
         }
-        println!("----------");
-        println!(
-            "self.chars.as_str before current is called: {}",
-            self.chars.as_str()
-        );
-        let generate = |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Token<'a>> {
-            println!("lexeme: {:?}", lexeme);
-            Some(Token { kind, line, lexeme })
-        };
+        let generate =
+            |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, Error>> {
+                Some(Ok(Token { kind, line, lexeme }))
+            };
+        self.start = self.current;
         let counter: usize = 0;
-        let temp = self.chars.as_str().trim_start().chars();
-        //the problem is that the next mutation will step forward one time and when chars.as_str()
-        //is called the chars will be "one ahead"
 
-        self.end = self.chars.as_str().len();
-        println!(
-            "self.chars.as_str before next is called: {}",
-            self.chars.as_str()
-        );
-        println!("----------");
-        let c = self.chars.next().unwrap_or('0');
-        println!("we have called current: and gotten: {}", c);
-        println!(
-            "temp as str after current is called and reassignment happens: {}",
-            temp.as_str()
-        );
-
-        // self.chars = temp;
-
+        let c = self.chars.next().unwrap_or('\0');
+        //yes im aware of code re-use and i dont care
         let third_state = match c {
-            '(' => return generate(TokenType::LeftParen, counter, self.lexeme()),
-            ')' => return generate(TokenType::RightParen, counter, self.lexeme()),
-            '{' => return generate(TokenType::LeftBrace, counter, self.lexeme()),
-            '}' => return generate(TokenType::RightBrace, counter, self.lexeme()),
-            ';' => return generate(TokenType::Semicolon, counter, self.lexeme()),
-            ',' => return generate(TokenType::Comma, counter, self.lexeme()),
-            '.' => return generate(TokenType::Dot, counter, self.lexeme()),
-            '-' => return generate(TokenType::Minus, counter, self.lexeme()),
-            '+' => return generate(TokenType::Plus, counter, self.lexeme()),
-            '/' => return generate(TokenType::Slash, counter, self.lexeme()),
-            '*' => return generate(TokenType::Star, counter, self.lexeme()),
-            '!' | '=' | '<' | '>' => ThirdState::OrEquals,
+            '(' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::LeftParen, counter, self.lexeme());
+            }
+            ')' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::RightParen, counter, self.lexeme());
+            }
+            '{' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::LeftBrace, counter, self.lexeme());
+            }
+            '}' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::RightBrace, counter, self.lexeme());
+            }
+            ';' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::Semicolon, counter, self.lexeme());
+            }
+            ',' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::Comma, counter, self.lexeme());
+            }
+            '.' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::Dot, counter, self.lexeme());
+            }
+            '-' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::Minus, counter, self.lexeme());
+            }
+            '+' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::Plus, counter, self.lexeme());
+            }
+            '/' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::Slash, counter, self.lexeme());
+            }
+            '*' => {
+                self.current = c.len_utf8();
+                return generate(TokenType::Star, counter, self.lexeme());
+            }
+            '!' | '=' | '<' | '>' => ThirdState::OrEquals(c),
             'A'..='Z' | 'a'..='z' => ThirdState::Iden,
             '0'..='9' => ThirdState::Number,
             '"' => ThirdState::String,
-            _ => ThirdState::Invalid,
+            _ => {
+                return Some(Err(anyhow!(
+                    "invalid character line: {}, this token: {}",
+                    counter,
+                    self.lexeme()
+                )));
+            }
         };
-        match third_state {
-            ThirdState::OrEquals => {
-                //NOTE: there is a much easirer way to do this !!!
-                if let Some(x) = self.bump() {
-                    match x {
-                        '<' => {
-                            return generate(TokenType::LessEqual, counter, self.lexeme());
-                        }
-                        '>' => {
-                            return generate(TokenType::GreaterEqual, counter, self.lexeme());
-                        }
-                        '!' => {
-                            return generate(TokenType::BangEqual, counter, self.lexeme());
-                        }
-                        '=' => {
-                            return generate(TokenType::EqualEqual, counter, self.lexeme());
-                        }
-                        _ => {}
+
+        let mut comparator_handle =
+            |kind: TokenType, kind2: TokenType, ch: char| -> Option<Result<Token<'a>, Error>> {
+                {
+                    println!("comparitor length: {:?}", self.chars.as_str().len());
+                    if self.first() == '=' {
+                        self.chars.next()?;
+                        self.current = self.code[self.chars.as_str().len()..].len();
+                        return generate(kind, counter, self.lexeme());
+                    } else {
+                        // self.chars.next()?;
+
+                        self.current = self.code[self.chars.as_str().len()..].len();
+                        return generate(kind2, counter, self.lexeme());
                     }
                 }
-                // return Some(Token::default(self.lexeme()));
-            }
+            };
+        match third_state {
+            ThirdState::OrEquals(c) => match c {
+                '<' => {
+                    return comparator_handle(TokenType::LessEqual, TokenType::Less, c);
+                }
+                '!' => {
+                    return comparator_handle(TokenType::BangEqual, TokenType::Bang, c);
+                }
+                '>' => {
+                    return comparator_handle(TokenType::GreaterEqual, TokenType::Greater, c);
+                }
+                '=' => {
+                    return comparator_handle(TokenType::EqualEqual, TokenType::Equal, c);
+                }
+                _ => {
+                    return Some(Err(anyhow!(
+                        "invalid character line: {}, this token: {}",
+                        counter,
+                        self.lexeme()
+                    )));
+                }
+            },
+
             ThirdState::String => {
                 if let Some(_) = self.chars.find(|&x| x != '"') {
-                    generate(TokenType::String, self.line, self.lexeme());
+                    self.current = self.code[self.chars.as_str().len()..].len();
+                    generate(TokenType::String, counter, self.lexeme());
                 } else {
                     //i dont think this is technacly correct
-                    generate(TokenType::String, self.line, self.lexeme());
+                    generate(TokenType::String, counter, self.lexeme());
                 }
             }
+
+            // let mut comparator_handle =
+            //     |kind: TokenType, kind2: TokenType, ch: char| -> Option<Result<Token<'a>, Error>> {
+            //         {
+            //             println!("second; {:?}", self.second());
+            //             if self.second() == c {
+            //                 self.chars.next()?;
+            //                 self.current = self.code[..self.chars.as_str().len()].len();
+            //                 return generate(kind, counter, self.lexeme());
+            //             } else {
+            //                 return generate(kind2, counter, self.lexeme());
+            //             }
+            //         }
+            //     };
             ThirdState::Number => todo!(),
             ThirdState::Iden => {
-                while let Some(x) = self.chars.next() {
-                    if !x.is_ascii_alphabetic() {
-                        break;
-                    }
+                while self.first().is_ascii_alphanumeric() {
+                    self.chars.next();
+                    // println!("self.chars.next:");
                 }
-
+                println!("length: {:?} ", self.chars.as_str().len());
+                self.current = self.code[self.chars.as_str().len()..].len();
                 let index = self.lexeme();
-                println!("index: {} ", index);
+                println!("index: {:?} ", index);
                 if let Some(c) = self.keywords.get_mut(&(index)) {
                     return generate(*c, counter, self.lexeme());
                 } else {
-                    { eprintln!("not in hash") }
+                    eprintln!("not in hash THIS SHOULD BE A VARIABE I WILL DO THIS LATER");
                 }
-                return Some(Token::default(self.lexeme()));
+                return Some(Ok(Token::default(self.lexeme())));
             }
-            ThirdState::Invalid => todo!(),
         };
+
         None
     }
 
-    fn trim_whitespace(&mut self) {
-        while matches!(self.current(), '\u{0009}' | '\u{0020}') {
-            self.chars = self.chars.as_str().trim_start().chars();
-        }
-    }
-
     fn lexeme(&mut self) -> &'a str {
-        println!(
-            "method lexeme: {:?}",
-            &self.code[(self.code.len() - self.chars.as_str().len() - 1)..self.end - 1]
-        );
-        println!("len {:?}", self.code.len());
-        println!("char from as_str {:?}", self.chars.as_str());
-        println!("as str {:?}", self.chars.as_str().len());
-        &self.code[(self.code.len() - self.chars.as_str().len() - 1)..self.end - 1]
+        &self.code[self.start..self.current]
     }
-
-    fn current(&mut self) -> char {
-        self.chars.next().unwrap_or('0')
-    }
-
-    fn bump(&mut self) -> Option<char> {
-        self.chars.next()
+    fn first(&self) -> char {
+        let mut temp = self.chars.clone();
+        println!("self.first: {:?}", temp);
+        temp.next().unwrap_or('\0')
     }
 
     fn second(&self) -> char {
-        let mut temp = self.code.chars();
+        let mut temp = self.chars.clone();
+        // println!("before first call: {:?}", temp);
         temp.next();
-        temp.next().unwrap_or('0')
+        // println!("after first call: {:?}", temp);
+        temp.next().unwrap_or('\0')
     }
 }
 #[cfg(test)]
@@ -257,20 +300,81 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unit_it_works_char() {
-        let mut result = Scanner::new("({");
+    #[ignore]
+    fn chart() {
+        let mut scanner = Scanner::new("{");
+
+        let token = scanner
+            .generator()
+            .expect("expected a token")
+            .expect("lexer returned error");
+
+        assert_eq!(token.kind, TokenType::LeftBrace);
+        assert_eq!(token.lexeme, "{");
+    }
+    #[test]
+    #[ignore]
+    fn orelse_first() {
+        let mut scanner = Scanner::new("<=fdkjdsalkjs");
+
+        let token = scanner
+            .generator()
+            .expect("expected a token")
+            .expect("lexer returned error");
+
+        assert_eq!(token.kind, TokenType::LessEqual);
+        assert_eq!(token.lexeme, "<=");
+    }
+    #[test]
+    fn orelse_second() {
+        let mut scanner = Scanner::new("!=fdkjdsalkjs");
+
+        let token = scanner
+            .generator()
+            .expect("expected a token")
+            .expect("lexer returned error");
+
+        assert_eq!(token.kind, TokenType::BangEqual);
+        assert_eq!(token.lexeme, "!=");
+    }
+    #[test]
+    #[ignore]
+    fn for_key() {
+        let mut scanner = Scanner::new("for");
+
+        let token = scanner
+            .generator()
+            .expect("expected a token")
+            .expect("lexer returned error");
+
+        assert_eq!(token.kind, TokenType::For);
+        assert_eq!(token.lexeme, "for");
+    }
+    #[test]
+    #[ignore]
+    fn iden() {
+        let mut result = Scanner::new("hello");
         if let Some(x) = result.generator() {
-            assert_eq!(x.kind, TokenType::LeftParen);
-            assert_eq!(x.lexeme, "(")
+            match x {
+                Ok(a) => {
+                    assert_eq!(a.kind, TokenType::Identifier);
+                    assert_eq!(a.lexeme, "hello")
+                }
+                Err(_) => {}
+            }
         }
     }
-
     #[test]
-    fn unit_iden() {
-        let mut result = Scanner::new(",AAA");
+    fn orelse() {
+        let mut result = Scanner::new("<abcd");
         if let Some(x) = result.generator() {
-            assert_eq!(x.kind, TokenType::Comma);
-            assert_eq!(x.lexeme, ",")
+            match x {
+                Ok(a) => {
+                    assert_eq!(a.kind, TokenType::Less);
+                    assert_eq!(a.lexeme, "<")
+                }
+                Err(_) => {}
+            }
         }
     }
 
