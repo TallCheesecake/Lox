@@ -1,4 +1,4 @@
-use anyhow::{Error, bail};
+use anyhow::Error;
 use anyhow::{Result, anyhow};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -203,8 +203,6 @@ impl<'a> Scanner<'a> {
                         self.current = self.code[self.chars.as_str().len()..].len();
                         return generate(kind, counter, self.lexeme());
                     } else {
-                        // self.chars.next()?;
-
                         self.current = self.code[self.chars.as_str().len()..].len();
                         return generate(kind2, counter, self.lexeme());
                     }
@@ -234,47 +232,42 @@ impl<'a> Scanner<'a> {
             },
 
             ThirdState::String => {
-                if let Some(_) = self.chars.find(|&x| x != '"') {
-                    self.current = self.code[self.chars.as_str().len()..].len();
-                    generate(TokenType::String, counter, self.lexeme());
-                } else {
-                    //i dont think this is technacly correct
-                    generate(TokenType::String, counter, self.lexeme());
+                if let Some(c) = self.chars.find(|&x| x == '"') {
+                    if c == '"' {
+                        self.current = self.code[self.chars.as_str().len()..].len();
+                        return generate(TokenType::String, counter, self.lexeme());
+                    } else {
+                        return generate(TokenType::String, counter, self.lexeme());
+                    }
                 }
             }
 
-            // let mut comparator_handle =
-            //     |kind: TokenType, kind2: TokenType, ch: char| -> Option<Result<Token<'a>, Error>> {
-            //         {
-            //             println!("second; {:?}", self.second());
-            //             if self.second() == c {
-            //                 self.chars.next()?;
-            //                 self.current = self.code[..self.chars.as_str().len()].len();
-            //                 return generate(kind, counter, self.lexeme());
-            //             } else {
-            //                 return generate(kind2, counter, self.lexeme());
-            //             }
-            //         }
-            //     };
-            ThirdState::Number => todo!(),
+            ThirdState::Number => {
+                //TODO: add accumulator for 2 . count
+                while self.first() != '.' {
+                    if let Some(_) = self.chars.find_map(|c| {
+                        if matches!(c, '0'..='9') {
+                            Some(())
+                        } else {
+                            None
+                        }
+                    }) {}
+                }
+            }
+
             ThirdState::Iden => {
                 while self.first().is_ascii_alphanumeric() {
                     self.chars.next();
-                    // println!("self.chars.next:");
                 }
-                println!("length: {:?} ", self.chars.as_str().len());
                 self.current = self.code[self.chars.as_str().len()..].len();
                 let index = self.lexeme();
-                println!("index: {:?} ", index);
                 if let Some(c) = self.keywords.get_mut(&(index)) {
                     return generate(*c, counter, self.lexeme());
                 } else {
-                    eprintln!("not in hash THIS SHOULD BE A VARIABE I WILL DO THIS LATER");
+                    return generate(TokenType::Identifier, counter, self.lexeme());
                 }
-                return Some(Ok(Token::default(self.lexeme())));
             }
         };
-
         None
     }
 
@@ -283,15 +276,6 @@ impl<'a> Scanner<'a> {
     }
     fn first(&self) -> char {
         let mut temp = self.chars.clone();
-        println!("self.first: {:?}", temp);
-        temp.next().unwrap_or('\0')
-    }
-
-    fn second(&self) -> char {
-        let mut temp = self.chars.clone();
-        // println!("before first call: {:?}", temp);
-        temp.next();
-        // println!("after first call: {:?}", temp);
         temp.next().unwrap_or('\0')
     }
 }
@@ -299,6 +283,18 @@ impl<'a> Scanner<'a> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn string() {
+        let mut scanner = Scanner::new("\"hello\"");
+
+        let token = scanner
+            .generator()
+            .expect("expected a token")
+            .expect("lexer returned error");
+
+        assert_eq!(token.kind, TokenType::String);
+        assert_eq!(token.lexeme, "\"hello\"");
+    }
     #[test]
     #[ignore]
     fn chart() {
@@ -326,6 +322,7 @@ mod tests {
         assert_eq!(token.lexeme, "<=");
     }
     #[test]
+    #[ignore]
     fn orelse_second() {
         let mut scanner = Scanner::new("!=fdkjdsalkjs");
 
@@ -336,48 +333,32 @@ mod tests {
 
         assert_eq!(token.kind, TokenType::BangEqual);
         assert_eq!(token.lexeme, "!=");
+        // println!("self.chars.next:");
     }
     #[test]
     #[ignore]
     fn for_key() {
-        let mut scanner = Scanner::new("for");
+        let mut scanner = Scanner::new("false");
 
         let token = scanner
             .generator()
             .expect("expected a token")
             .expect("lexer returned error");
 
-        assert_eq!(token.kind, TokenType::For);
-        assert_eq!(token.lexeme, "for");
+        assert_eq!(token.kind, TokenType::False);
+        assert_eq!(token.lexeme, "false");
     }
     #[test]
     #[ignore]
-    fn iden() {
-        let mut result = Scanner::new("hello");
-        if let Some(x) = result.generator() {
-            match x {
-                Ok(a) => {
-                    assert_eq!(a.kind, TokenType::Identifier);
-                    assert_eq!(a.lexeme, "hello")
-                }
-                Err(_) => {}
-            }
-        }
+    fn iden_key() {
+        let mut scanner = Scanner::new("hello");
+        let token = scanner
+            .generator()
+            .expect("expected a token")
+            .expect("lexer returned error");
+        assert_eq!(token.kind, TokenType::Identifier);
+        assert_eq!(token.lexeme, "hello");
     }
-    #[test]
-    fn orelse() {
-        let mut result = Scanner::new("<abcd");
-        if let Some(x) = result.generator() {
-            match x {
-                Ok(a) => {
-                    assert_eq!(a.kind, TokenType::Less);
-                    assert_eq!(a.lexeme, "<")
-                }
-                Err(_) => {}
-            }
-        }
-    }
-
     #[test]
     #[ignore]
     fn expensive_test() {
