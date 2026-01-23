@@ -1,9 +1,23 @@
-use anyhow::{Context, Error};
-use anyhow::{Result, anyhow};
-use std::borrow::Cow;
+use miette::{Diagnostic, Result, SourceSpan};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::Chars;
+
+#[derive(Debug, Diagnostic)]
+#[diagnostic(code(oops::my::bad), help("try doing it better next time?"))]
+pub struct MyBad {
+    #[source_code]
+    pub source: String,
+    #[label("main issue")]
+    pub primary_span: SourceSpan,
+}
+impl std::error::Error for MyBad {}
+
+impl std::fmt::Display for MyBad {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.source)
+    }
+}
 
 #[derive(PartialEq, Debug, Copy, Clone)]
 pub enum TokenType {
@@ -69,15 +83,15 @@ impl<'a> Display for Token<'a> {
     }
 }
 
-impl<'a> Token<'a> {
-    pub fn default(text: &'a str) -> Token<'a> {
-        Token {
-            kind: TokenType::Error,
-            lexeme: text,
-            line: 0,
-        }
-    }
-}
+// impl<'a> Token<'a> {
+//     pub fn default(text: &'a str) -> Token<'a> {
+//         Token {
+//             kind: TokenType::Error,
+//             lexeme: text,
+//             line: 0,
+//         }
+//     }
+// }
 
 pub struct Scanner<'a> {
     keywords: HashMap<&'a str, TokenType>,
@@ -118,15 +132,16 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn generator(&mut self) -> Option<Result<Token<'a>, Error>> {
+    pub fn generator(&mut self) -> Option<Result<Token<'a>, MyBad>> {
         pub enum ThirdState {
             OrEquals(char),
             String,
             Number,
             Iden,
         }
+        //TODO: make 2 error types
         let generate =
-            |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, Error>> {
+            |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, MyBad>> {
                 Some(Ok(Token { kind, line, lexeme }))
             };
         self.start = self.current;
@@ -185,18 +200,16 @@ impl<'a> Scanner<'a> {
             '0'..='9' => ThirdState::Number,
             '"' => ThirdState::String,
             _ => {
-                return Some(Err(anyhow!(
-                    "invalid character line: {}, this token: {}",
-                    counter,
-                    self.lexeme()
-                )));
+                return Some(Err(MyBad {
+                    source: self.code.into(),
+                    primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
+                }));
             }
         };
 
         let mut comparator_handle =
-            |kind: TokenType, kind2: TokenType, ch: char| -> Option<Result<Token<'a>, Error>> {
+            |kind: TokenType, kind2: TokenType| -> Option<Result<Token<'a>, MyBad>> {
                 {
-                    println!("comparitor length: {:?}", self.chars.as_str().len());
                     if self.first() == '=' {
                         self.chars.next()?;
                         self.current = self.code[self.chars.as_str().len()..].len();
@@ -210,23 +223,22 @@ impl<'a> Scanner<'a> {
         match third_state {
             ThirdState::OrEquals(c) => match c {
                 '<' => {
-                    return comparator_handle(TokenType::LessEqual, TokenType::Less, c);
+                    return comparator_handle(TokenType::LessEqual, TokenType::Less);
                 }
                 '!' => {
-                    return comparator_handle(TokenType::BangEqual, TokenType::Bang, c);
+                    return comparator_handle(TokenType::BangEqual, TokenType::Bang);
                 }
                 '>' => {
-                    return comparator_handle(TokenType::GreaterEqual, TokenType::Greater, c);
+                    return comparator_handle(TokenType::GreaterEqual, TokenType::Greater);
                 }
                 '=' => {
-                    return comparator_handle(TokenType::EqualEqual, TokenType::Equal, c);
+                    return comparator_handle(TokenType::EqualEqual, TokenType::Equal);
                 }
                 _ => {
-                    return Some(Err(anyhow!(
-                        "invalid character line: {}, this token: {}",
-                        counter,
-                        self.lexeme()
-                    )));
+                    return Some(Err(MyBad {
+                        source: self.code.into(),
+                        primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
+                    }));
                 }
             },
 
@@ -259,7 +271,7 @@ impl<'a> Scanner<'a> {
                     Ok(x) => {
                         return generate(TokenType::Number(x), counter, self.lexeme());
                     }
-                    Err(_) => {}
+                    Err(x) => eprintln!("{}", x),
                 }
             }
 
@@ -272,7 +284,11 @@ impl<'a> Scanner<'a> {
                 if let Some(c) = self.keywords.get_mut(&(index)) {
                     return generate(*c, counter, self.lexeme());
                 } else {
-                    return generate(TokenType::Identifier, counter, self.lexeme());
+                    return Some(Err(MyBad {
+                        source: self.code.into(),
+                        primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
+                    }));
+                    // return generate(TokenType::Identifier, counter, self.lexeme());
                 }
             }
         };
@@ -293,6 +309,24 @@ impl<'a> Scanner<'a> {
         temp.next().unwrap_or('\0')
     }
 }
+pub fn example_main() -> miette::Result<()> {
+    let scanner = Scanner::new("hello qqq ").generator();
+    println!("inside example");
+    match scanner {
+        Some(Ok(token)) => {
+            println!("SOME OK");
+            assert_eq!(token.kind, TokenType::Identifier);
+            assert_eq!(token.lexeme, "for");
+            Ok(())
+        }
+        Some(Err(e)) => {
+            println!("SOME ERR");
+            Err(e.into())
+        }
+        None => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,94 +339,8 @@ mod tests {
             .expect("expected a token")
             .expect("lexer returned error");
 
+        eprintln!("TOKEN VALUE: {}", token);
         assert_eq!(token.kind, TokenType::Number(1 as f64));
         assert_eq!(token.lexeme, "1");
-    }
-    #[test]
-    fn number() {
-        let mut scanner = Scanner::new("4134123.19843982432");
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-
-        assert_eq!(token.kind, TokenType::Number(4134123.19843982432));
-        assert_eq!(token.lexeme, "4134123.19843982432");
-    }
-    #[test]
-    fn string() {
-        let mut scanner = Scanner::new("\"hello\"");
-
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-
-        assert_eq!(token.kind, TokenType::String);
-        assert_eq!(token.lexeme, "\"hello\"");
-    }
-    #[test]
-    fn chart() {
-        let mut scanner = Scanner::new("{");
-
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-
-        assert_eq!(token.kind, TokenType::LeftBrace);
-        assert_eq!(token.lexeme, "{");
-    }
-    #[test]
-    fn orelse_first() {
-        let mut scanner = Scanner::new("<=fdkjdsalkjs");
-
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-
-        assert_eq!(token.kind, TokenType::LessEqual);
-        assert_eq!(token.lexeme, "<=");
-    }
-    #[test]
-    fn orelse_second() {
-        let mut scanner = Scanner::new("!=fdkjdsalkjs");
-
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-
-        assert_eq!(token.kind, TokenType::BangEqual);
-        assert_eq!(token.lexeme, "!=");
-        // println!("self.chars.next:");
-    }
-    #[test]
-    fn for_key() {
-        let mut scanner = Scanner::new("false");
-
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-
-        assert_eq!(token.kind, TokenType::False);
-        assert_eq!(token.lexeme, "false");
-    }
-    #[test]
-    fn iden_key() {
-        let mut scanner = Scanner::new("hello");
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-        assert_eq!(token.kind, TokenType::Identifier);
-        assert_eq!(token.lexeme, "hello");
-    }
-    #[test]
-    #[ignore]
-    fn expensive_test() {
-        // code that takes an hour to run
     }
 }

@@ -1,8 +1,6 @@
+use miette::Result;
 mod scanner;
-fn main() {
-    // live_input()
-}
-
-fn create_lexer(input: &str) -> () {
-    scanner::Scanner::new(input);
+use scanner::example_main;
+fn main() -> Result<()> {
+    example_main()
 }
