@@ -1,21 +1,22 @@
-use miette::{Diagnostic, Result, SourceSpan};
+use miette::{Diagnostic, IntoDiagnostic, Result, SourceSpan};
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{Display, write};
 use std::str::Chars;
 
 #[derive(Debug, Diagnostic)]
-#[diagnostic(code(oops::my::bad), help("try doing it better next time?"))]
+#[diagnostic(help("try doing it better next time?"))]
 pub struct MyBad {
     #[source_code]
     pub source: String,
     #[label("main issue")]
     pub primary_span: SourceSpan,
 }
+
 impl std::error::Error for MyBad {}
 
 impl std::fmt::Display for MyBad {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.source)
+        write!(f, "error around: {} ", self.source)
     }
 }
 
@@ -66,7 +67,6 @@ pub enum TokenType {
     Var,
     While,
 
-    Error,
     Eof,
 }
 
@@ -266,7 +266,6 @@ impl<'a> Scanner<'a> {
                 }
 
                 self.current = self.code[self.chars.as_str().len()..].len();
-                // println!("{}", self.lexeme());
                 match self.lexeme().parse::<f64>() {
                     Ok(x) => {
                         return generate(TokenType::Number(x), counter, self.lexeme());
@@ -284,11 +283,12 @@ impl<'a> Scanner<'a> {
                 if let Some(c) = self.keywords.get_mut(&(index)) {
                     return generate(*c, counter, self.lexeme());
                 } else {
-                    return Some(Err(MyBad {
-                        source: self.code.into(),
-                        primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
-                    }));
-                    // return generate(TokenType::Identifier, counter, self.lexeme());
+                    return generate(TokenType::Identifier, counter, self.lexeme());
+                    //
+                    // return Some(Err(MyBad {
+                    //     source: self.code.into(),
+                    //     primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
+                    // }));
                 }
             }
         };
@@ -309,23 +309,15 @@ impl<'a> Scanner<'a> {
         temp.next().unwrap_or('\0')
     }
 }
-pub fn example_main() -> miette::Result<()> {
-    let scanner = Scanner::new("hello qqq ").generator();
-    println!("inside example");
-    match scanner {
-        Some(Ok(token)) => {
-            println!("SOME OK");
-            assert_eq!(token.kind, TokenType::Identifier);
-            assert_eq!(token.lexeme, "for");
-            Ok(())
-        }
-        Some(Err(e)) => {
-            println!("SOME ERR");
-            Err(e.into())
-        }
-        None => Ok(()),
-    }
-}
+
+// pub fn example_main() -> miette::Result<()> {
+//     let scanner = Scanner::new("hello qqq ").generator();
+//     match scanner {
+//         Some(Ok(_)) => Ok(()),
+//         Some(Err(e)) => Err(e.into()),
+//         None => Ok(()),
+//     }
+// }
 
 #[cfg(test)]
 mod tests {
