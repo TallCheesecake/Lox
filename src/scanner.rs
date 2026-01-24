@@ -83,16 +83,6 @@ impl<'a> Display for Token<'a> {
     }
 }
 
-// impl<'a> Token<'a> {
-//     pub fn default(text: &'a str) -> Token<'a> {
-//         Token {
-//             kind: TokenType::Error,
-//             lexeme: text,
-//             line: 0,
-//         }
-//     }
-// }
-
 pub struct Scanner<'a> {
     keywords: HashMap<&'a str, TokenType>,
     code: &'a str,
@@ -309,15 +299,6 @@ impl<'a> Scanner<'a> {
         temp.next().unwrap_or('\0')
     }
 }
-
-// pub fn example_main() -> miette::Result<()> {
-//     let scanner = Scanner::new("hello qqq ").generator();
-//     match scanner {
-//         Some(Ok(_)) => Ok(()),
-//         Some(Err(e)) => Err(e.into()),
-//         None => Ok(()),
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
