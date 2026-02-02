@@ -1,4 +1,3 @@
-use anyhow::{self, Error, anyhow};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use miette::Result;
 mod scanner;
@@ -39,21 +38,21 @@ fn main() -> Result<()> {
                 let path = path.as_deref().unwrap_or_else(|| OsStr::new(""));
                 match str::from_utf8(fs::read(path).unwrap().as_slice()) {
                     Err(_) => Ok(()),
-                    Ok(x) => pull_out_token(x),
+                    Ok(x) => pull_out_tokens(x),
                 }
             }
         }
     }
 }
 
-fn pull_out_token(input: &str) -> Result<scanner::Token<'_>> {
-    let mut i = 0;
-    i += 1;
-    println!("it ran: {} times ", i);
-    let scanner = scanner::Scanner::new(input).generator();
-    match scanner {
-        Some(Ok(x)) => return Ok(x),
-        Some(Err(e)) => return Err(miette::Report::from_err(e)),
-        None => return todo!(),
-    };
+fn pull_out_tokens(input: &str) -> Result<()> {
+    let mut scanner = scanner::Scanner::new(input); // mutable because generator mutates it
+
+    while let Some(token_result) = scanner.generator() {
+        match token_result {
+            Ok(token) => println!("{:?}", token),
+            Err(e) => return Err(miette::Report::from_err(e)),
+        }
+    }
+    Ok(())
 }

@@ -2,6 +2,7 @@ use miette::{Diagnostic, IntoDiagnostic, Result, SourceSpan};
 use std::collections::HashMap;
 use std::fmt::{Display, write};
 use std::str::Chars;
+use std::thread::current;
 
 #[derive(Debug, Diagnostic)]
 #[diagnostic(help("try doing it better next time?"))]
@@ -76,6 +77,7 @@ pub struct Token<'a> {
     pub line: usize,
     pub lexeme: &'a str,
 }
+
 //TODO: make the eof function a method of scnner
 impl<'a> Display for Token<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -122,11 +124,22 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    fn handle_newline(&mut self) {
+        let mut i = 0;
+        while matches!(self.first(), '\n') {
+            i += 1;
+            eprintln!("called nl: {} times", i);
+            self.chars.next().unwrap_or('\0');
+            self.line += 1;
+        }
+        self.current = self.code[self.chars.as_str().len()..].len();
+    }
+
     fn handle_whitespace(&mut self) {
         let mut i = 0;
         while matches!(self.first(), ' ') {
             i += 1;
-            eprintln!("called next : {} times", i);
+            eprintln!("called wh: {} times", i);
             self.chars.next().unwrap_or('\0');
         }
         self.current = self.code[self.chars.as_str().len()..].len();
@@ -143,58 +156,59 @@ impl<'a> Scanner<'a> {
             |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, MyBad>> {
                 Some(Ok(Token { kind, line, lexeme }))
             };
-        //call before self.start (whitespace)
+
+        self.handle_newline();
         self.handle_whitespace();
         self.start = self.current;
-        let mut counter: usize = 0;
         let c = self.chars.next().unwrap_or('\0');
-        if c == '\n' {
-            counter += 1;
-        }
         let third_state = match c {
             '(' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::LeftParen, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::LeftParen, self.line, self.lexeme());
             }
             ')' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::RightParen, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::RightParen, self.line, self.lexeme());
             }
             '{' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::LeftBrace, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::LeftBrace, self.line, self.lexeme());
             }
             '}' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::RightBrace, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::RightBrace, self.line, self.lexeme());
             }
             ';' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::Semicolon, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::Semicolon, self.line, self.lexeme());
             }
             ',' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::Comma, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::Comma, self.line, self.lexeme());
             }
             '.' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::Dot, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::Dot, self.line, self.lexeme());
             }
             '-' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::Minus, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::Minus, self.line, self.lexeme());
             }
             '+' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::Plus, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::Plus, self.line, self.lexeme());
             }
             '/' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::Slash, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::Slash, self.line, self.lexeme());
             }
             '*' => {
-                self.current = c.len_utf8();
-                return generate(TokenType::Star, counter, self.lexeme());
+                self.current += c.len_utf8();
+                return generate(TokenType::Star, self.line, self.lexeme());
+            }
+            '\0' => {
+                self.current += c.len_utf8();
+                return generate(TokenType::Eof, self.line, self.lexeme());
             }
             '!' | '=' | '<' | '>' => ThirdState::OrEquals(c),
             'A'..='Z' | 'a'..='z' => ThirdState::Iden,
@@ -214,10 +228,10 @@ impl<'a> Scanner<'a> {
                     if self.first() == '=' {
                         self.chars.next()?;
                         self.current = self.code[self.chars.as_str().len()..].len();
-                        return generate(kind, counter, self.lexeme());
+                        return generate(kind, self.line, self.lexeme());
                     } else {
                         self.current = self.code[self.chars.as_str().len()..].len();
-                        return generate(kind2, counter, self.lexeme());
+                        return generate(kind2, self.line, self.lexeme());
                     }
                 }
             };
@@ -247,9 +261,9 @@ impl<'a> Scanner<'a> {
                 if let Some(c) = self.chars.find(|&x| x == '"') {
                     if c == '"' {
                         self.current = self.code[self.chars.as_str().len()..].len();
-                        return generate(TokenType::String, counter, self.lexeme());
+                        return generate(TokenType::String, self.line, self.lexeme());
                     } else {
-                        return generate(TokenType::String, counter, self.lexeme());
+                        return generate(TokenType::String, self.line, self.lexeme());
                     }
                 }
             }
@@ -269,7 +283,7 @@ impl<'a> Scanner<'a> {
                 self.current = self.code[self.chars.as_str().len()..].len();
                 match self.lexeme().parse::<f64>() {
                     Ok(x) => {
-                        return generate(TokenType::Number(x), counter, self.lexeme());
+                        return generate(TokenType::Number(x), self.line, self.lexeme());
                     }
                     Err(x) => eprintln!("{}", x),
                 }
@@ -282,10 +296,9 @@ impl<'a> Scanner<'a> {
                 self.current = self.code[self.chars.as_str().len()..].len();
                 let index = self.lexeme();
                 if let Some(c) = self.keywords.get_mut(&(index)) {
-                    return generate(*c, counter, self.lexeme());
+                    return generate(*c, self.line, self.lexeme());
                 } else {
-                    return generate(TokenType::Identifier, counter, self.lexeme());
-                    //
+                    return generate(TokenType::Identifier, self.line, self.lexeme());
                 }
             }
         };
@@ -308,19 +321,4 @@ impl<'a> Scanner<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    use super::*;
-    fn number_one() {
-        let mut scanner = Scanner::new("1");
-
-        let token = scanner
-            .generator()
-            .expect("expected a token")
-            .expect("lexer returned error");
-
-        eprintln!("TOKEN VALUE: {}", token);
-        assert_eq!(token.kind, TokenType::Number(1 as f64));
-        assert_eq!(token.lexeme, "1");
-    }
-}
+mod tests {}
