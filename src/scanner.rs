@@ -76,7 +76,7 @@ pub struct Token<'a> {
     pub line: usize,
     pub lexeme: &'a str,
 }
-
+//TODO: make the eof function a method of scnner
 impl<'a> Display for Token<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", &self.lexeme)
@@ -122,6 +122,15 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    fn handle_whitespace(&mut self) {
+        let mut i = 0;
+        while matches!(self.first(), ' ') {
+            i += 1;
+            eprintln!("called next : {} times", i);
+            self.chars.next().unwrap_or('\0');
+        }
+        self.current = self.code[self.chars.as_str().len()..].len();
+    }
     pub fn generator(&mut self) -> Option<Result<Token<'a>, MyBad>> {
         pub enum ThirdState {
             OrEquals(char),
@@ -134,6 +143,8 @@ impl<'a> Scanner<'a> {
             |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, MyBad>> {
                 Some(Ok(Token { kind, line, lexeme }))
             };
+        //call before self.start (whitespace)
+        self.handle_whitespace();
         self.start = self.current;
         let mut counter: usize = 0;
         let c = self.chars.next().unwrap_or('\0');
@@ -275,10 +286,6 @@ impl<'a> Scanner<'a> {
                 } else {
                     return generate(TokenType::Identifier, counter, self.lexeme());
                     //
-                    // return Some(Err(MyBad {
-                    //     source: self.code.into(),
-                    //     primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
-                    // }));
                 }
             }
         };
@@ -302,8 +309,8 @@ impl<'a> Scanner<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     #[test]
+    use super::*;
     fn number_one() {
         let mut scanner = Scanner::new("1");
 
