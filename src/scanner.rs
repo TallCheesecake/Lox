@@ -2,10 +2,9 @@ use miette::{Diagnostic, IntoDiagnostic, Result, SourceSpan};
 use std::collections::HashMap;
 use std::fmt::{Display, write};
 use std::str::Chars;
-use std::thread::current;
 
 #[derive(Debug, Diagnostic)]
-#[diagnostic(help("try doing it better next time?"))]
+#[diagnostic(help("This is most likely a invalid token (some char not allowed in the language)"))]
 pub struct MyBad {
     #[source_code]
     pub source: String,
@@ -14,10 +13,10 @@ pub struct MyBad {
 }
 
 impl std::error::Error for MyBad {}
-
+//NOTE: I have no Idea how to format this such that its actually usefull this lib is a POS :(
 impl std::fmt::Display for MyBad {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "error around: {} ", self.source)
+        write!(f, "{} ", self.)
     }
 }
 
@@ -93,7 +92,8 @@ pub struct Scanner<'a> {
     chars: Chars<'a>,
     line: usize,
 }
-
+//TODO: think about turning into iterator so that you can collect into a heap allocated
+//vec to make parsing very easy since you already kinda have the generator method ad next
 impl<'a> Scanner<'a> {
     pub fn new(code: &'a str) -> Scanner {
         let mut keywords = HashMap::with_capacity(16);
@@ -124,26 +124,28 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    fn handle_newline(&mut self) {
-        let mut i = 0;
-        while matches!(self.first(), '\n') {
-            i += 1;
-            eprintln!("called nl: {} times", i);
+    // fn handle_newline(&mut self) {
+    //     let mut i = 0;
+    //     while matches!(self.first(), '\n') {
+    //         i += 1;
+    //         eprintln!("called nl: {} times", i);
+    //         self.chars.next().unwrap_or('\0');
+    //         self.line += 1;
+    //     }
+    //     self.current = self.code[self.chars.as_str().len()..].len();
+    // }
+
+    fn handle_whitespace(&mut self) {
+        while matches!(self.first(), '\n' | ' ') {
+            if self.first() == '\n' {
+                self.line += 1;
+            };
             self.chars.next().unwrap_or('\0');
-            self.line += 1;
+            self.current = self.code[self.chars.as_str().len()..].len();
         }
         self.current = self.code[self.chars.as_str().len()..].len();
     }
 
-    fn handle_whitespace(&mut self) {
-        let mut i = 0;
-        while matches!(self.first(), ' ') {
-            i += 1;
-            eprintln!("called wh: {} times", i);
-            self.chars.next().unwrap_or('\0');
-        }
-        self.current = self.code[self.chars.as_str().len()..].len();
-    }
     pub fn generator(&mut self) -> Option<Result<Token<'a>, MyBad>> {
         pub enum ThirdState {
             OrEquals(char),
@@ -157,8 +159,8 @@ impl<'a> Scanner<'a> {
                 Some(Ok(Token { kind, line, lexeme }))
             };
 
-        self.handle_newline();
         self.handle_whitespace();
+        self.current = self.code[self.chars.as_str().len()..].len();
         self.start = self.current;
         let c = self.chars.next().unwrap_or('\0');
         let third_state = match c {
@@ -207,7 +209,7 @@ impl<'a> Scanner<'a> {
                 return generate(TokenType::Star, self.line, self.lexeme());
             }
             '\0' => {
-                self.current += c.len_utf8();
+                // self.current += c.len_utf8();
                 return generate(TokenType::Eof, self.line, self.lexeme());
             }
             '!' | '=' | '<' | '>' => ThirdState::OrEquals(c),
@@ -217,7 +219,7 @@ impl<'a> Scanner<'a> {
             _ => {
                 return Some(Err(MyBad {
                     source: self.code.into(),
-                    primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
+                    primary_span: SourceSpan::new(self.start.into(), self.lexeme().len().into()),
                 }));
             }
         };
@@ -252,7 +254,10 @@ impl<'a> Scanner<'a> {
                 _ => {
                     return Some(Err(MyBad {
                         source: self.code.into(),
-                        primary_span: SourceSpan::new(0.into(), self.lexeme().len().into()),
+                        primary_span: SourceSpan::new(
+                            self.start.into(),
+                            self.lexeme().len().into(),
+                        ),
                     }));
                 }
             },

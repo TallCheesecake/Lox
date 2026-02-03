@@ -1,12 +1,12 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use miette::Result;
+use miette::{Diagnostic, Result};
 mod scanner;
 use std::{
     ffi::{OsStr, OsString},
     fs,
 };
 
-use crate::scanner::TokenType;
+use crate::scanner::{MyBad, TokenType};
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
 #[command(name = "git")]
@@ -36,6 +36,7 @@ fn main() -> Result<()> {
                 unreachable!();
             } else {
                 let path = path.as_deref().unwrap_or_else(|| OsStr::new(""));
+                //match only for valid path
                 match str::from_utf8(fs::read(path).unwrap().as_slice()) {
                     Err(_) => Ok(()),
                     Ok(x) => pull_out_tokens(x),
@@ -50,8 +51,13 @@ fn pull_out_tokens(input: &str) -> Result<()> {
 
     while let Some(token_result) = scanner.generator() {
         match token_result {
-            Ok(token) => println!("{:?}", token),
-            Err(e) => return Err(miette::Report::from_err(e)),
+            Ok(token) => {
+                if token.kind == TokenType::Eof {
+                    break;
+                }
+                println!("{:?}", token)
+            }
+            Err(e) => return Err(e.into()),
         }
     }
     Ok(())
