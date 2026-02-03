@@ -1,22 +1,22 @@
-use miette::{Diagnostic, IntoDiagnostic, Result, SourceSpan};
+use miette::{Diagnostic, Result, SourceSpan};
 use std::collections::HashMap;
-use std::fmt::{Display, write};
+use std::fmt::Display;
 use std::str::Chars;
 
 #[derive(Debug, Diagnostic)]
 #[diagnostic(help("This is most likely a invalid token (some char not allowed in the language)"))]
 pub struct MyBad {
     #[source_code]
-    pub source: String,
+    source: String,
     #[label("main issue")]
-    pub primary_span: SourceSpan,
+    primary_span: SourceSpan,
 }
 
 impl std::error::Error for MyBad {}
 //NOTE: I have no Idea how to format this such that its actually usefull this lib is a POS :(
 impl std::fmt::Display for MyBad {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} ", self.)
+        write!(f, "invalid token found")
     }
 }
 
@@ -95,7 +95,7 @@ pub struct Scanner<'a> {
 //TODO: think about turning into iterator so that you can collect into a heap allocated
 //vec to make parsing very easy since you already kinda have the generator method ad next
 impl<'a> Scanner<'a> {
-    pub fn new(code: &'a str) -> Scanner {
+    pub fn new(code: &'a str) -> Scanner<'a> {
         let mut keywords = HashMap::with_capacity(16);
         keywords.insert("else", TokenType::Else);
         keywords.insert("and", TokenType::And);

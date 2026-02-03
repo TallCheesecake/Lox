@@ -1,12 +1,12 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
-use miette::{Diagnostic, Result};
+use clap::{Parser, Subcommand};
+use miette::Result;
 mod scanner;
 use std::{
     ffi::{OsStr, OsString},
     fs,
 };
 
-use crate::scanner::{MyBad, TokenType};
+use crate::scanner::TokenType;
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
 #[command(name = "git")]
