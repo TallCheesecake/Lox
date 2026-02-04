@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use miette::Result;
+mod parser;
 mod scanner;
 use std::{
     ffi::{OsStr, OsString},
@@ -7,6 +8,7 @@ use std::{
 };
 
 use crate::scanner::TokenType;
+
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
 #[command(name = "git")]
@@ -47,10 +49,8 @@ fn main() -> Result<()> {
 }
 
 fn pull_out_tokens(input: &str) -> Result<()> {
-    let mut scanner = scanner::Scanner::new(input); // mutable because generator mutates it
-
-    while let Some(token_result) = scanner.generator() {
-        match token_result {
+    for i in scanner::Scanner::new(input) {
+        match i {
             Ok(token) => {
                 if token.kind == TokenType::Eof {
                     break;
@@ -60,5 +60,6 @@ fn pull_out_tokens(input: &str) -> Result<()> {
             Err(e) => return Err(e.into()),
         }
     }
+
     Ok(())
 }

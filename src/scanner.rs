@@ -13,7 +13,6 @@ pub struct MyBad {
 }
 
 impl std::error::Error for MyBad {}
-//NOTE: I have no Idea how to format this such that its actually usefull this lib is a POS :(
 impl std::fmt::Display for MyBad {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "invalid token found")
@@ -92,61 +91,10 @@ pub struct Scanner<'a> {
     chars: Chars<'a>,
     line: usize,
 }
-//TODO: think about turning into iterator so that you can collect into a heap allocated
-//vec to make parsing very easy since you already kinda have the generator method ad next
-impl<'a> Scanner<'a> {
-    pub fn new(code: &'a str) -> Scanner<'a> {
-        let mut keywords = HashMap::with_capacity(16);
-        keywords.insert("else", TokenType::Else);
-        keywords.insert("and", TokenType::And);
-        keywords.insert("for", TokenType::For);
-        keywords.insert("fun", TokenType::Fun);
-        keywords.insert("class", TokenType::Class);
-        keywords.insert("return", TokenType::Return);
-        keywords.insert("if", TokenType::If);
-        keywords.insert("nil", TokenType::Nil);
-        keywords.insert("or", TokenType::Or);
-        keywords.insert("true", TokenType::True);
-        keywords.insert("false", TokenType::False);
-        keywords.insert("print", TokenType::Print);
-        keywords.insert("super", TokenType::Super);
-        keywords.insert("this", TokenType::This);
-        keywords.insert("var", TokenType::Var);
-        keywords.insert("while", TokenType::While);
 
-        Scanner {
-            keywords,
-            code,
-            current: 0,
-            start: 0,
-            chars: code.chars(),
-            line: 1,
-        }
-    }
-
-    // fn handle_newline(&mut self) {
-    //     let mut i = 0;
-    //     while matches!(self.first(), '\n') {
-    //         i += 1;
-    //         eprintln!("called nl: {} times", i);
-    //         self.chars.next().unwrap_or('\0');
-    //         self.line += 1;
-    //     }
-    //     self.current = self.code[self.chars.as_str().len()..].len();
-    // }
-
-    fn handle_whitespace(&mut self) {
-        while matches!(self.first(), '\n' | ' ') {
-            if self.first() == '\n' {
-                self.line += 1;
-            };
-            self.chars.next().unwrap_or('\0');
-            self.current = self.code[self.chars.as_str().len()..].len();
-        }
-        self.current = self.code[self.chars.as_str().len()..].len();
-    }
-
-    pub fn generator(&mut self) -> Option<Result<Token<'a>, MyBad>> {
+impl<'a> Iterator for Scanner<'a> {
+    type Item = Result<Token<'a>, MyBad>;
+    fn next(&mut self) -> Option<Self::Item> {
         pub enum ThirdState {
             OrEquals(char),
             String,
@@ -309,7 +257,47 @@ impl<'a> Scanner<'a> {
         };
         None
     }
+}
 
+impl<'a> Scanner<'a> {
+    pub fn new(code: &'a str) -> Scanner<'a> {
+        let mut keywords = HashMap::with_capacity(16);
+        keywords.insert("else", TokenType::Else);
+        keywords.insert("and", TokenType::And);
+        keywords.insert("for", TokenType::For);
+        keywords.insert("fun", TokenType::Fun);
+        keywords.insert("class", TokenType::Class);
+        keywords.insert("return", TokenType::Return);
+        keywords.insert("if", TokenType::If);
+        keywords.insert("nil", TokenType::Nil);
+        keywords.insert("or", TokenType::Or);
+        keywords.insert("true", TokenType::True);
+        keywords.insert("false", TokenType::False);
+        keywords.insert("print", TokenType::Print);
+        keywords.insert("super", TokenType::Super);
+        keywords.insert("this", TokenType::This);
+        keywords.insert("var", TokenType::Var);
+        keywords.insert("while", TokenType::While);
+
+        Scanner {
+            keywords,
+            code,
+            current: 0,
+            start: 0,
+            chars: code.chars(),
+            line: 1,
+        }
+    }
+    fn handle_whitespace(&mut self) {
+        while matches!(self.first(), '\n' | ' ') {
+            if self.first() == '\n' {
+                self.line += 1;
+            };
+            self.chars.next().unwrap_or('\0');
+            self.current = self.code[self.chars.as_str().len()..].len();
+        }
+        self.current = self.code[self.chars.as_str().len()..].len();
+    }
     fn lexeme(&mut self) -> &'a str {
         &self.code[self.start..self.current]
     }
