@@ -288,6 +288,7 @@ impl<'a> Scanner<'a> {
             line: 1,
         }
     }
+
     fn handle_whitespace(&mut self) {
         while matches!(self.first(), '\n' | ' ') {
             if self.first() == '\n' {
@@ -311,6 +312,12 @@ impl<'a> Scanner<'a> {
         let mut temp = self.chars.clone();
         temp.next().unwrap_or('\0')
     }
+}
+
+fn collect(input: &str) -> Vec<Result<Token<'_>, MyBad>> {
+    Scanner::new(input)
+        .into_iter()
+        .collect::<Vec<Result<Token, MyBad>>>()
 }
 
 #[cfg(test)]

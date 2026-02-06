@@ -1,4 +1,8 @@
-use crate::scanner::*;
+use crate::scanner;
+use crate::scanner::MyBad;
+use crate::scanner::Token;
+use crate::scanner::TokenType;
+use miette::{Result, WrapErr};
 enum Ops {
     Add,
     Bang,
@@ -7,30 +11,62 @@ enum Ops {
     Sub,
 }
 
-// enum from : https://github.com/Darksecond/lox/blob/master/lox-syntax/src/expr_parser.rs#L15C1-L21C4
-enum Precedence {
-    None,
-    Assign, // =
-    Or,
-    And,
-    Equality,   // == !=
-    Comparison, // < <= > >=
-    Term,       // + -
-    Factor,     // * /
-    Unary,      // ! -
-    Call,       // ()
-    List,       // []
-    Primary,
+enum Exp<'a> {
+    Term(Token<'a>),
+    NonTerm(Token<'a>, Vec<Exp<'a>>),
 }
-
-struct Parser {
-    token: [TokenType],
+enum Tree<'a> {
+    Nil,
+    Atom(Atom<'a>),
 }
+#[derive(Debug, Clone, PartialEq)]
+//NOTE:these are things that canot derive, they are non terminal
+//String canot derive anything, unlike for example func which can derive into the
+//remaining function
+pub enum Atom<'a> {
+    String(&'a str),
+    Number(f64),
+    Nil,
+    Bool(bool),
+    Ident(&'a str),
+    Super,
+    This,
+}
+pub struct Parser<'a> {
+    pub scanner: scanner::Scanner<'a>,
+}
+impl<'a> Parser<'a> {
+    pub fn construct(input: &'a str) -> Parser<'a> {
+        Self {
+            scanner: scanner::Scanner::new(input),
+        }
+    }
+    //This kinda stucture was inspired by: https://github.com/jonhoo/lox/blob/master/src/parse.rs#L426
+    pub fn parse_expresion(&mut self, bp: u8) -> miette::Result<Tree> {
+        let lhs = match self.scanner.next() {
+            Some(Ok(x)) => x,
+            None => return Ok(Tree::Nil),
+            Some(Err(e)) => return Err(e).wrap_err("error in token fields"),
+        };
 
-//
-// pub fn parse() {
-// this is vaugle what it should look like
-//     loop {
-//         parse();
-//     }
-// }
+        loop {
+            let op = match self.scanner.next() {
+                Some(Ok(x)) => {
+                    if matches!(x.kind, TokenType::Eof) {
+                        break;
+                    } else if matches!(x.kind, TokenType::Minus) {
+                        x
+                    } else {
+                        panic!()
+                    }
+                }
+                None => return Ok(Tree::Nil),
+                Some(Err(e)) => return Err(e).wrap_err("error in token fields"),
+            };
+            todo!();
+        }
+        // lhs
+        todo!();
+    }
+}
+// fn infix_bp(token: scanner::Token) -> u8 {}

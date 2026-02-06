@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use miette::Result;
+use miette::{Context, Error, Result};
 mod parser;
 mod scanner;
 use std::{
@@ -7,7 +7,8 @@ use std::{
     fs,
 };
 
-use crate::scanner::TokenType;
+use crate::parser::{self as parse};
+use crate::scanner::{MyBad, Token, TokenType};
 
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -24,42 +25,26 @@ enum Commands {
         #[arg(value_name = "PATH")]
         path: Option<OsString>,
     },
-    // Flag {
-    //     flags: String,
-    // },
 }
 
 fn main() -> Result<()> {
     let args = Cli::parse();
     println!("{:?}", args.command);
-    match args.command {
-        Commands::Input { path } => {
-            if path.is_none() {
-                unreachable!();
-            } else {
-                let path = path.as_deref().unwrap_or_else(|| OsStr::new(""));
-                //match only for valid path
-                match str::from_utf8(fs::read(path).unwrap().as_slice()) {
-                    Err(_) => Ok(()),
-                    Ok(x) => pull_out_tokens(x),
-                }
-            }
-        }
-    }
-}
 
-fn pull_out_tokens(input: &str) -> Result<()> {
-    for i in scanner::Scanner::new(input) {
-        match i {
-            Ok(token) => {
-                if token.kind == TokenType::Eof {
-                    break;
-                }
-                println!("{:?}", token)
-            }
-            Err(e) => return Err(e.into()),
-        }
-    }
+    let Commands::Input { path } = args.command;
+    let path = path.as_deref().unwrap_or_else(|| OsStr::new(""));
+
+    let bytes = fs::read(path).unwrap_or_else(|_| {
+        panic!("failed to read file {:?}", path);
+    });
+
+    let input = std::str::from_utf8(&bytes).unwrap();
+
+    test(input)?;
 
     Ok(())
+}
+
+fn test(input: &str) -> miette::Result<Vec<Token<'_>>> {
+    parse::Parser::construct(input)
 }
