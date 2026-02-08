@@ -1,4 +1,4 @@
-use miette::{Diagnostic, Result, SourceSpan};
+use miette::{Diagnostic, Error, Result, SourceSpan};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::str::Chars;
@@ -85,6 +85,7 @@ impl<'a> Display for Token<'a> {
 
 pub struct Scanner<'a> {
     keywords: HashMap<&'a str, TokenType>,
+    peeked: Option<Result<Token<'a>, Error>>,
     code: &'a str,
     current: usize,
     start: usize,
@@ -93,7 +94,7 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Iterator for Scanner<'a> {
-    type Item = Result<Token<'a>, MyBad>;
+    type Item = miette::Result<Token<'a>, miette::Error>;
     fn next(&mut self) -> Option<Self::Item> {
         pub enum ThirdState {
             OrEquals(char),
@@ -103,7 +104,7 @@ impl<'a> Iterator for Scanner<'a> {
         }
         //TODO: make 2 error types
         let generate =
-            |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, MyBad>> {
+            |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, Error>> {
                 Some(Ok(Token { kind, line, lexeme }))
             };
 
@@ -168,12 +169,13 @@ impl<'a> Iterator for Scanner<'a> {
                 return Some(Err(MyBad {
                     source: self.code.into(),
                     primary_span: SourceSpan::new(self.start.into(), self.lexeme().len().into()),
-                }));
+                }
+                .into()));
             }
         };
 
         let mut comparator_handle =
-            |kind: TokenType, kind2: TokenType| -> Option<Result<Token<'a>, MyBad>> {
+            |kind: TokenType, kind2: TokenType| -> Option<Result<Token<'a>, Error>> {
                 {
                     if self.first() == '=' {
                         self.chars.next()?;
@@ -206,7 +208,8 @@ impl<'a> Iterator for Scanner<'a> {
                             self.start.into(),
                             self.lexeme().len().into(),
                         ),
-                    }));
+                    }
+                    .into()));
                 }
             },
 
@@ -281,6 +284,7 @@ impl<'a> Scanner<'a> {
 
         Scanner {
             keywords,
+            peeked: None,
             code,
             current: 0,
             start: 0,
@@ -299,8 +303,17 @@ impl<'a> Scanner<'a> {
         }
         self.current = self.code[self.chars.as_str().len()..].len();
     }
+
     fn lexeme(&mut self) -> &'a str {
         &self.code[self.start..self.current]
+    }
+    //This idea to get around the ownership stuff is from: https://github.com/jonhoo/lox/blob/master/src/lex.rs#L188
+    pub fn peek(&mut self) -> Option<&Result<Token<'a>, miette::Error>> {
+        if self.peeked.is_some() {
+            return self.peeked.as_ref();
+        }
+        self.peeked = self.next();
+        self.peeked.as_ref()
     }
 
     fn second(&self) -> char {
@@ -314,10 +327,10 @@ impl<'a> Scanner<'a> {
     }
 }
 
-fn collect(input: &str) -> Vec<Result<Token<'_>, MyBad>> {
+fn collect(input: &str) -> Vec<Result<Token<'_>, Error>> {
     Scanner::new(input)
         .into_iter()
-        .collect::<Vec<Result<Token, MyBad>>>()
+        .collect::<Vec<Result<Token, Error>>>()
 }
 
 #[cfg(test)]
