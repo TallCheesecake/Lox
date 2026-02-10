@@ -1,3 +1,3 @@
 # Lox-Interp-Rust
 
-Writing a lox interpreter in rust.
+Writing a lox interpreter in Rust.
