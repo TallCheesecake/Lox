@@ -1,8 +1,6 @@
-use core::panic;
-use std::str::MatchIndices;
-
 use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
+use core::panic;
 use miette::miette;
 use miette::{Error, LabeledSpan, Severity, WrapErr};
 
