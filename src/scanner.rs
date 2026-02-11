@@ -295,7 +295,6 @@ impl<'a> Scanner<'a> {
             line: 1,
         }
     }
-
     fn handle_whitespace(&mut self) {
         while matches!(self.first(), '\n' | ' ') {
             if self.first() == '\n' {
@@ -327,6 +326,14 @@ pub fn collect(input: &str) -> Vec<Result<Token<'_>, Error>> {
         .into_iter()
         .collect::<Vec<Result<Token, Error>>>()
 }
+//I think this only copies one
+pub fn fancy_expect<'a>(input: &'a Result<Token<'a>, Error>) -> Result<Token<'a>, &Error> {
+    input.as_ref().copied().map_err(|e| e)
+}
 
-#[cfg(test)]
-mod tests {}
+pub fn fancy_peek<'a>(
+    input: &'a Vec<Result<Token<'a>, Error>>,
+    index: usize,
+) -> &'a Result<Token<'a>, ()> {
+    input.get(index).as_ref().copied()
+}

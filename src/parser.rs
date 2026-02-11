@@ -1,8 +1,7 @@
 use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
-use miette::miette;
-use miette::{Error, LabeledSpan, Severity, WrapErr};
+use miette::{Error, LabeledSpan};
 
 enum Tree<'a> {
     Nil,
@@ -12,9 +11,6 @@ enum Tree<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-//NOTE:these are things that canot derive, they are non terminal
-//String canot derive anything, unlike for example func which can derive into the
-//remaining function
 pub enum Atom<'a> {
     String(&'a str),
     Number(f64),
@@ -57,23 +53,21 @@ pub struct Parser<'a> {
     pub pos: usize,
 }
 
-//NOTE: I have no actual idea what nil is supposed to be
-//I havent been able to find it in the book :(
 fn is_atom<'a>(input: &scanner::Token<'a>) -> (Atom<'a>, bool) {
     match input.kind {
-        TokenType::Number(x) => (Atom::Number(x), true),
+        TokenType::Number(x) => (Atom::Number(x.clone()), true),
         TokenType::True => (Atom::Bool(true), true),
         TokenType::False => (Atom::Bool(false), true),
         TokenType::Super => (Atom::Super, true),
         TokenType::Star => (Atom::This, true),
         TokenType::Slash => (Atom::Nil, true),
-        TokenType::Plus => (Atom::String(input.lexeme), true),
-        TokenType::Nil => (Atom::String(input.lexeme), true),
+        TokenType::Plus => (Atom::String(input.lexeme.clone()), true),
+        TokenType::Nil => (Atom::String(input.lexeme.clone()), true),
         _ => todo!(),
     }
 }
 
-fn is_op<'a>(input: &scanner::Token<'a>) -> (Op, bool) {
+fn is_op<'a>(input: &'a scanner::Token<'a>) -> (Op, bool) {
     match input.kind {
         TokenType::Minus => (Op::Minus, true),
         TokenType::Star => (Op::Star, true),
@@ -90,15 +84,18 @@ impl<'a> Parser<'a> {
             pos: 0,
         }
     }
-    fn advance(&'a mut self) -> Option<&mut Result<Token<'a>, Error>> {
+
+    fn advance(&'a mut self) -> Option<&'a mut Result<Token<'a>, Error>> {
         self.pos += 1;
         self.scanner.get_mut(self.pos)
     }
-    fn peek_one(&'a mut self) -> Option<&Result<Token<'a>, Error>> {
+
+    fn peek_one(&'a self) -> Option<&'a Result<Token<'a>, Error>> {
         self.scanner.get(1)
     }
-    fn parse_expresion(&'a mut self, min_bp: u8) -> miette::Result<Tree<'a>, Error> {
-        let mut lhs = match self.advance() {
+
+    fn make(&'a mut self) -> Tree {
+        let lhs = match self.advance() {
             Some(Ok(x)) => {
                 if let (atom, true) = is_atom(x) {
                     Tree::Atom(atom)
@@ -108,27 +105,16 @@ impl<'a> Parser<'a> {
                     panic!("invalid token: {}", x)
                 }
             }
-
-            //TODO: handle EOF
-            None => return Ok(todo!()),
-            //TODO :this is where you should beadding your own custom expect
+            None => todo!(),
             Some(Err(e)) => todo!(),
         };
-        //TODO: write your own expect
+        lhs
+    }
+
+    fn parse_expresion(&'a mut self, min_bp: u8) -> miette::Result<Tree<'a>, Error> {
+        let mut lhs = self.make();
         loop {
             let op = self.peek_one();
-            if op.map_or(false, |op| op.is_err()) {
-                return Err(match self.peek_one() {
-                    Some(Ok(_)) => {
-                        unreachable!()
-                    }
-                    None => {
-                        unreachable!()
-                    }
-                    Some(Err(e)) => e.wrap_err("there is a error in the current token"),
-                });
-            }
-
             //peek and the subsiquint block checks for None and Err
             let op = match op.expect("critical error") {
                 Err(_) => unreachable!(),
@@ -230,29 +216,3 @@ fn postfix_binding_power(op: &str) -> Option<(u8, ())> {
         _ => None,
     }
 }
-// pub enum Op {
-//     Minus,
-//     Plus,
-//     Star,
-//     Slash,
-//
-//---------------
-//     BangEqual,
-//     EqualEqual,
-//     LessEqual,
-//     GreaterEqual,
-//     Less,
-//     Greater,
-//     Bang,
-//     And,
-//     Or,
-//     Call,
-//     For,
-//     Class,
-//     Print,
-//     Return,
-//     Field,
-//     Var,
-//     While,
-//     Group,
-// }
