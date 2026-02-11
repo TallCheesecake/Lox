@@ -53,11 +53,13 @@ pub enum Op {
 }
 
 pub struct Parser<'a> {
-    pub scanner: scanner::Scanner<'a>,
+    pub scanner: Vec<Result<Token<'a>, Error>>,
+    pub pos: usize,
 }
+
 //NOTE: I have no actual idea what nil is supposed to be
 //I havent been able to find it in the book :(
-fn is_atom(input: scanner::Token) -> (Atom, bool) {
+fn is_atom<'a>(input: &scanner::Token<'a>) -> (Atom<'a>, bool) {
     match input.kind {
         TokenType::Number(x) => (Atom::Number(x), true),
         TokenType::True => (Atom::Bool(true), true),
@@ -71,7 +73,7 @@ fn is_atom(input: scanner::Token) -> (Atom, bool) {
     }
 }
 
-fn is_op(input: scanner::Token) -> (Op, bool) {
+fn is_op<'a>(input: &scanner::Token<'a>) -> (Op, bool) {
     match input.kind {
         TokenType::Minus => (Op::Minus, true),
         TokenType::Star => (Op::Star, true),
@@ -84,111 +86,118 @@ fn is_op(input: scanner::Token) -> (Op, bool) {
 impl<'a> Parser<'a> {
     pub fn construct(input: &'a str) -> Parser<'a> {
         Self {
-            scanner: scanner::Scanner::new(input),
+            scanner: scanner::collect(input),
+            pos: 0,
         }
     }
-}
-
-pub fn parse_expresion<'a>(
-    scanner: &'a mut scanner::Scanner<'a>,
-    min_bp: u8,
-) -> miette::Result<Tree<'a>, Error> {
-    let mut lhs = match scanner.next() {
-        Some(Ok(x)) => {
-            if let (atom, true) = is_atom(x) {
-                Tree::Atom(atom)
-            } else if let (op, true) = is_op(x) {
-                //TODO: handle ()
-                Tree::Op(op)
-            } else {
-                panic!("invalid token: {}", x)
+    fn advance(&'a mut self) -> Option<&mut Result<Token<'a>, Error>> {
+        self.pos += 1;
+        self.scanner.get_mut(self.pos)
+    }
+    fn peek_one(&'a mut self) -> Option<&Result<Token<'a>, Error>> {
+        self.scanner.get(1)
+    }
+    fn parse_expresion(&'a mut self, min_bp: u8) -> miette::Result<Tree<'a>, Error> {
+        let mut lhs = match self.advance() {
+            Some(Ok(x)) => {
+                if let (atom, true) = is_atom(x) {
+                    Tree::Atom(atom)
+                } else if let (op, true) = is_op(x) {
+                    Tree::Op(op)
+                } else {
+                    panic!("invalid token: {}", x)
+                }
             }
-        }
-        //TODO: handle EOF
-        None => return Ok(todo!()),
-        Some(Err(e)) => return Err(e).wrap_err("error in token fields"),
-    };
-    loop {
-        let op = scanner.peek();
-        if op.map_or(false, |op| op.is_err()) {
-            return Err(match scanner.next() {
-                Some(Ok(_)) => {
-                    unreachable!()
-                }
-                None => {
-                    unreachable!()
-                }
-                Some(Err(e)) => e.wrap_err("there is a error in the current token"),
-            });
-        }
 
-        //peek and the subsiquint block checks for None and Err
-        let op = match op.expect("critical error") {
-            Err(_) => unreachable!(),
-            Ok(Token {
-                lexeme: op @ ("+" | "/" | "-" | "*"),
-                ..
-            }) => {
-                if let Some((l_bp, r_bp)) = postfix_binding_power(op) {
-                    if l_bp < min_bp {
-                        break;
+            //TODO: handle EOF
+            None => return Ok(todo!()),
+            //TODO :this is where you should beadding your own custom expect
+            Some(Err(e)) => todo!(),
+        };
+        //TODO: write your own expect
+        loop {
+            let op = self.peek_one();
+            if op.map_or(false, |op| op.is_err()) {
+                return Err(match self.peek_one() {
+                    Some(Ok(_)) => {
+                        unreachable!()
                     }
-                    scanner.next();
-                    lhs = if op == &"[" {
-                        let rhs = match parse_expresion(scanner, 0) {
+                    None => {
+                        unreachable!()
+                    }
+                    Some(Err(e)) => e.wrap_err("there is a error in the current token"),
+                });
+            }
+
+            //peek and the subsiquint block checks for None and Err
+            let op = match op.expect("critical error") {
+                Err(_) => unreachable!(),
+                Ok(Token {
+                    lexeme: op @ ("+" | "/" | "-" | "*"),
+                    ..
+                }) => {
+                    if let Some((l_bp, r_bp)) = postfix_binding_power(op) {
+                        if l_bp < min_bp {
+                            break;
+                        }
+                        self.advance();
+                        lhs = if op == &"[" {
+                            let rhs = match self.parse_expresion(0) {
+                                Ok(x) => x,
+                                Err(_) => todo!(),
+                            };
+                            //since postfix_binding returns none for a ] we need to
+                            //manually both assert and mutate to move the thing onto the
+                            //closing ]
+                            //
+                            match self.advance() {
+                                None => {
+                                    todo!()
+                                }
+                                //this is a lexing error
+                                Some(Err(e)) => return Err(e.wrap_err("lexing error")),
+                                Some(Ok(x)) => assert_eq!(x.kind, TokenType::RightBrace),
+                            };
+                            Tree::NonTerm(op, vec![lhs, rhs])
+                            //the above will only be the case if there is a m
+                        } else {
+                            Tree::NonTerm(op, vec![lhs])
+                        };
+                        continue;
+                    }
+
+                    if let Some((l_bp, r_bp)) = infix_binding_power(op) {
+                        if l_bp < min_bp {
+                            break;
+                        }
+                        //peek asserts for us
+                        self.advance();
+
+                        let rhs = match self.parse_expresion(r_bp) {
                             Ok(x) => x,
                             Err(_) => todo!(),
                         };
-                        //since postfix_binding returns none for a ] we need to
-                        //manually both assert and mutate to move the thing onto the
-                        //closing ]
-                        //
-                        match scanner.next() {
-                            None => {
-                                todo!()
-                            }
-                            //this is a lexing error
-                            Some(Err(e)) => return Err(e),
-                            Some(Ok(x)) => assert_eq!(x.kind, TokenType::RightBrace),
-                        };
                         Tree::NonTerm(op, vec![lhs, rhs])
-                        //the above will only be the case if there is a m
                     } else {
-                        Tree::NonTerm(op, vec![lhs])
-                    };
-                    continue;
-                }
-
-                if let Some((l_bp, r_bp)) = infix_binding_power(op) {
-                    if l_bp < min_bp {
-                        break;
+                        continue;
                     }
-                    //peek asserts for us
-                    scanner.next();
-
-                    let rhs = match parse_expresion(scanner, r_bp) {
-                        Ok(x) => x,
-                        Err(_) => todo!(),
-                    };
-                    Tree::NonTerm(op, vec![lhs, rhs])
-                } else {
-                    continue;
                 }
-            }
-            t => {
-                todo!()
-            }
-            Ok(tok) => {
-                return Err(miette::miette! {
-                labels = vec![LabeledSpan::at_offset(tok.lexeme.len()+ tok.lexeme.len(),"here")],
-                "unexpected: Token, require operator (-,+, /, *)",
-                });
-            }
-        };
-        break;
+                t => {
+                    todo!()
+                }
+                Ok(tok) => {
+                    return Err(miette::miette! {
+                    labels = vec![LabeledSpan::at_offset(tok.lexeme.len()+ tok.lexeme.len(),"here")],
+                    "unexpected: Token, require operator (-,+, /, *)",
+                    });
+                }
+            };
+            break;
+        }
+        Ok(lhs)
     }
-    Ok(lhs)
 }
+
 //this is a really good idea from: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
 fn prefix_binding_power(op: &str) -> Option<((), u8)> {
     assert!(op.len() == 1);

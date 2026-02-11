@@ -85,7 +85,6 @@ impl<'a> Display for Token<'a> {
 
 pub struct Scanner<'a> {
     keywords: HashMap<&'a str, TokenType>,
-    peeked: Option<Result<Token<'a>, Error>>,
     code: &'a str,
     current: usize,
     start: usize,
@@ -93,6 +92,11 @@ pub struct Scanner<'a> {
     line: usize,
 }
 
+//--------------------------------------------------
+//NOTE: I originaly dit not want to have the thing be greedy but ig it might be better because
+//the betching might be better for cache optimization and its really hard to get >Gb of code
+//in a single token stream.
+//--------------------------------------------------
 impl<'a> Iterator for Scanner<'a> {
     type Item = miette::Result<Token<'a>, miette::Error>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -284,7 +288,6 @@ impl<'a> Scanner<'a> {
 
         Scanner {
             keywords,
-            peeked: None,
             code,
             current: 0,
             start: 0,
@@ -307,14 +310,6 @@ impl<'a> Scanner<'a> {
     fn lexeme(&mut self) -> &'a str {
         &self.code[self.start..self.current]
     }
-    //This idea to get around the ownership stuff is from: https://github.com/jonhoo/lox/blob/master/src/lex.rs#L188
-    pub fn peek(&mut self) -> Option<&Result<Token<'a>, miette::Error>> {
-        if self.peeked.is_some() {
-            return self.peeked.as_ref();
-        }
-        self.peeked = self.next();
-        self.peeked.as_ref()
-    }
 
     fn second(&self) -> char {
         let mut temp = self.chars.clone();
@@ -327,7 +322,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-fn collect(input: &str) -> Vec<Result<Token<'_>, Error>> {
+pub fn collect(input: &str) -> Vec<Result<Token<'_>, Error>> {
     Scanner::new(input)
         .into_iter()
         .collect::<Vec<Result<Token, Error>>>()
