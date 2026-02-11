@@ -2,8 +2,9 @@ use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
 use miette::{Error, LabeledSpan};
+use std::fmt::Display;
 
-enum Tree<'a> {
+pub enum Tree<'a> {
     Nil,
     Atom(Atom<'a>),
     NonTerm(&'a str, Vec<Tree<'a>>),
@@ -13,6 +14,7 @@ enum Tree<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Atom<'a> {
     String(&'a str),
+
     Number(f64),
     Nil,
     Bool(bool),
@@ -48,6 +50,7 @@ pub enum Op {
     Group,
 }
 
+#[derive(Debug)]
 pub struct Parser<'a> {
     pub scanner: Vec<Result<Token<'a>, Error>>,
     pub pos: usize,
@@ -61,8 +64,8 @@ fn is_atom<'a>(input: &scanner::Token<'a>) -> (Atom<'a>, bool) {
         TokenType::Super => (Atom::Super, true),
         TokenType::Star => (Atom::This, true),
         TokenType::Slash => (Atom::Nil, true),
-        TokenType::Plus => (Atom::String(input.lexeme.clone()), true),
-        TokenType::Nil => (Atom::String(input.lexeme.clone()), true),
+        TokenType::Plus => (Atom::String(input.lexeme), true),
+        TokenType::Nil => (Atom::String(input.lexeme), true),
         _ => todo!(),
     }
 }
@@ -78,108 +81,80 @@ fn is_op<'a>(input: &'a scanner::Token<'a>) -> (Op, bool) {
 }
 
 impl<'a> Parser<'a> {
-    pub fn construct(input: &'a str) -> Parser<'a> {
-        Self {
+    pub fn new(input: &'a str) -> Self {
+        Parser {
             scanner: scanner::collect(input),
             pos: 0,
         }
     }
-
-    fn advance(&'a mut self) -> Option<&'a mut Result<Token<'a>, Error>> {
+    fn current(&self) -> Result<&Token<'a>, &Error> {
+        self.scanner.get(self.pos).unwrap().as_ref()
+    }
+    fn peek(&self) -> Result<&Token<'a>, &Error> {
+        self.scanner.get(self.pos + 1).unwrap().as_ref()
+    }
+    fn advance(&mut self) -> Result<&Token<'a>, &Error> {
         self.pos += 1;
-        self.scanner.get_mut(self.pos)
+        let current = self.current();
+        current
     }
-
-    fn peek_one(&'a self) -> Option<&'a Result<Token<'a>, Error>> {
-        self.scanner.get(1)
-    }
-
-    fn make(&'a mut self) -> Tree {
-        let lhs = match self.advance() {
-            Some(Ok(x)) => {
-                if let (atom, true) = is_atom(x) {
-                    Tree::Atom(atom)
-                } else if let (op, true) = is_op(x) {
-                    Tree::Op(op)
-                } else {
-                    panic!("invalid token: {}", x)
-                }
-            }
-            None => todo!(),
-            Some(Err(e)) => todo!(),
+    pub fn parse_expresion(&mut self, min_bp: u8) -> miette::Result<Tree<'a>, Error> {
+        let temp_lhs = self.advance();
+        println!("advanced");
+        let mut lhs = match temp_lhs {
+            _ => Tree::Atom(Atom::Number(3.1)),
         };
-        lhs
-    }
-
-    fn parse_expresion(&'a mut self, min_bp: u8) -> miette::Result<Tree<'a>, Error> {
-        let mut lhs = self.make();
+        self.pos = self.pos + 1;
         loop {
-            let op = self.peek_one();
-            //peek and the subsiquint block checks for None and Err
-            let op = match op.expect("critical error") {
-                Err(_) => unreachable!(),
-                Ok(Token {
-                    lexeme: op @ ("+" | "/" | "-" | "*"),
-                    ..
-                }) => {
-                    if let Some((l_bp, r_bp)) = postfix_binding_power(op) {
-                        if l_bp < min_bp {
-                            break;
-                        }
-                        self.advance();
-                        lhs = if op == &"[" {
-                            let rhs = match self.parse_expresion(0) {
-                                Ok(x) => x,
-                                Err(_) => todo!(),
-                            };
-                            //since postfix_binding returns none for a ] we need to
-                            //manually both assert and mutate to move the thing onto the
-                            //closing ]
-                            //
-                            match self.advance() {
-                                None => {
-                                    todo!()
-                                }
-                                //this is a lexing error
-                                Some(Err(e)) => return Err(e.wrap_err("lexing error")),
-                                Some(Ok(x)) => assert_eq!(x.kind, TokenType::RightBrace),
-                            };
-                            Tree::NonTerm(op, vec![lhs, rhs])
-                            //the above will only be the case if there is a m
-                        } else {
-                            Tree::NonTerm(op, vec![lhs])
-                        };
-                        continue;
-                    }
-
+            println!("inside loop");
+            let op_result = match self.peek() {
+                Ok(tok) => tok.lexeme,
+                Err(_) => {
+                    break;
+                }
+            };
+            match op_result {
+                op @ ("+" | "-" | "/" | "*") => {
                     if let Some((l_bp, r_bp)) = infix_binding_power(op) {
                         if l_bp < min_bp {
                             break;
                         }
-                        //peek asserts for us
                         self.advance();
 
-                        let rhs = match self.parse_expresion(r_bp) {
-                            Ok(x) => x,
-                            Err(_) => todo!(),
-                        };
-                        Tree::NonTerm(op, vec![lhs, rhs])
-                    } else {
+                        let rhs = self.parse_expresion(r_bp)?;
+                        lhs = Tree::NonTerm(op, vec![lhs, rhs]);
                         continue;
                     }
                 }
-                t => {
-                    todo!()
+                "[" => {
+                    if let Some((l_bp, _)) = postfix_binding_power("[") {
+                        if l_bp < min_bp {
+                            break;
+                        }
+                        self.advance();
+
+                        let rhs = self.parse_expresion(0)?;
+
+                        match self.advance() {
+                            Ok(tok) if tok.lexeme == "]" => {
+                                lhs = Tree::NonTerm("[", vec![lhs, rhs]);
+                            }
+                            Ok(tok) => {
+                                return Err(miette::miette! {
+                                    labels = vec![LabeledSpan::at_offset(tok.lexeme.len(), "here")],
+                                    "expected ']', found '{}'",
+                                    tok.lexeme
+                                });
+                            }
+                            Err(_) => break, // _ => {
+                        }
+                        continue;
+                    }
                 }
-                Ok(tok) => {
-                    return Err(miette::miette! {
-                    labels = vec![LabeledSpan::at_offset(tok.lexeme.len()+ tok.lexeme.len(),"here")],
-                    "unexpected: Token, require operator (-,+, /, *)",
-                    });
-                }
-            };
-            break;
+                _ => break,
+            }
         }
+
         Ok(lhs)
     }
 }
@@ -214,5 +189,25 @@ fn postfix_binding_power(op: &str) -> Option<(u8, ())> {
         '!' => Some((11, ())),
         '[' => Some((11, ())),
         _ => None,
+    }
+}
+
+impl<'a> std::fmt::Display for Tree<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Tree::Atom(i) => write!(f, "{:?}", i),
+            _ => {
+                todo!()
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_works() {
+        unreachable!()
     }
 }

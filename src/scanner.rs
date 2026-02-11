@@ -322,18 +322,9 @@ impl<'a> Scanner<'a> {
 }
 
 pub fn collect(input: &str) -> Vec<Result<Token<'_>, Error>> {
+    println!("collected");
     Scanner::new(input)
         .into_iter()
         .collect::<Vec<Result<Token, Error>>>()
 }
 //I think this only copies one
-pub fn fancy_expect<'a>(input: &'a Result<Token<'a>, Error>) -> Result<Token<'a>, &Error> {
-    input.as_ref().copied().map_err(|e| e)
-}
-
-pub fn fancy_peek<'a>(
-    input: &'a Vec<Result<Token<'a>, Error>>,
-    index: usize,
-) -> &'a Result<Token<'a>, ()> {
-    input.get(index).as_ref().copied()
-}
