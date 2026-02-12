@@ -115,7 +115,14 @@ impl<'a> Iterator for Scanner<'a> {
         self.handle_whitespace();
         self.current = self.code[self.chars.as_str().len()..].len();
         self.start = self.current;
-        let c = self.chars.next().unwrap_or('\0');
+        // if self.first() == '\0' {
+        //     return Some(Ok(Token {
+        //         kind: TokenType::Eof,
+        //         line: self.line,
+        //         lexeme: "\0",
+        //     }));
+        // };
+        let c = self.chars.next()?;
         let third_state = match c {
             '(' => {
                 self.current += c.len_utf8();
@@ -322,9 +329,9 @@ impl<'a> Scanner<'a> {
 }
 
 pub fn collect(input: &str) -> Vec<Result<Token<'_>, Error>> {
-    println!("collected");
     Scanner::new(input)
         .into_iter()
+        .map(|e| e)
         .collect::<Vec<Result<Token, Error>>>()
 }
 //I think this only copies one

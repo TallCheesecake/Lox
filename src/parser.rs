@@ -4,6 +4,7 @@ use core::panic;
 use miette::{Error, LabeledSpan};
 use std::fmt::Display;
 
+#[derive(Debug)]
 pub enum Tree<'a> {
     Nil,
     Atom(Atom<'a>),
@@ -81,50 +82,67 @@ fn is_op<'a>(input: &'a scanner::Token<'a>) -> (Op, bool) {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Self {
+    pub fn new(input: &'a str) -> Parser<'a> {
         Parser {
             scanner: scanner::collect(input),
             pos: 0,
         }
     }
+
     fn current(&self) -> Result<&Token<'a>, &Error> {
         self.scanner.get(self.pos).unwrap().as_ref()
     }
-    fn peek(&self) -> Result<&Token<'a>, &Error> {
-        self.scanner.get(self.pos + 1).unwrap().as_ref()
+
+    fn peek(&self) -> Option<&Result<Token<'a>, Error>> {
+        self.scanner.get(self.pos + 1)
     }
+
     fn advance(&mut self) -> Result<&Token<'a>, &Error> {
-        self.pos += 1;
         let current = self.current();
         current
     }
+
     pub fn parse_expresion(&mut self, min_bp: u8) -> miette::Result<Tree<'a>, Error> {
-        let temp_lhs = self.advance();
-        println!("advanced");
-        let mut lhs = match temp_lhs {
-            _ => Tree::Atom(Atom::Number(3.1)),
+        let mut lhs = match self.advance() {
+            Ok(Token {
+                kind: TokenType::Number(e),
+                ..
+            }) => Tree::Atom(Atom::Number(e.clone())),
+            Ok(Token {
+                kind: TokenType::Dot | TokenType::Plus,
+                ..
+            }) => Tree::Op(Op::Plus),
+            Err(e) => {
+                todo!()
+            }
+            _ => panic!(),
         };
-        self.pos = self.pos + 1;
+        self.pos += 1;
         loop {
-            println!("inside loop");
             let op_result = match self.peek() {
-                Ok(tok) => tok.lexeme,
-                Err(_) => {
+                Some(Ok(tok)) => tok.lexeme,
+                Some(Err(_)) => {
+                    break;
+                }
+
+                None => {
+                    println!("none");
                     break;
                 }
             };
             match op_result {
                 op @ ("+" | "-" | "/" | "*") => {
                     if let Some((l_bp, r_bp)) = infix_binding_power(op) {
+                        println!("l_bp: {}", l_bp);
+                        println!("op: {}", op);
                         if l_bp < min_bp {
                             break;
                         }
                         self.advance();
-
                         let rhs = self.parse_expresion(r_bp)?;
                         lhs = Tree::NonTerm(op, vec![lhs, rhs]);
-                        continue;
-                    }
+                    };
+                    continue;
                 }
                 "[" => {
                     if let Some((l_bp, _)) = postfix_binding_power("[") {
@@ -148,13 +166,13 @@ impl<'a> Parser<'a> {
                             }
                             Err(_) => break, // _ => {
                         }
-                        continue;
                     }
+                    continue;
                 }
                 _ => break,
             }
         }
-
+        println!("broke");
         Ok(lhs)
     }
 }
@@ -195,9 +213,8 @@ fn postfix_binding_power(op: &str) -> Option<(u8, ())> {
 impl<'a> std::fmt::Display for Tree<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Tree::Atom(i) => write!(f, "{:?}", i),
-            _ => {
-                todo!()
+            r => {
+                write!(f, "{:?}", r)
             }
         }
     }

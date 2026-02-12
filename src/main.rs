@@ -26,9 +26,8 @@ mod scanner;
 // }
 //
 fn main() {
-    println!("before ");
-    let mut p = parser::Parser::new("1");
+    let mut p = parser::Parser::new("1 +");
     println!("{:?}", p);
     let output = p.parse_expresion(0).unwrap();
-    println!("{output}");
+    println!("output {output}");
 }
