@@ -92,11 +92,6 @@ pub struct Scanner<'a> {
     line: usize,
 }
 
-//--------------------------------------------------
-//NOTE: I originaly dit not want to have the thing be greedy but ig it might be better because
-//the betching might be better for cache optimization and its really hard to get >Gb of code
-//in a single token stream.
-//--------------------------------------------------
 impl<'a> Iterator for Scanner<'a> {
     type Item = miette::Result<Token<'a>, miette::Error>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -115,13 +110,6 @@ impl<'a> Iterator for Scanner<'a> {
         self.handle_whitespace();
         self.current = self.code[self.chars.as_str().len()..].len();
         self.start = self.current;
-        // if self.first() == '\0' {
-        //     return Some(Ok(Token {
-        //         kind: TokenType::Eof,
-        //         line: self.line,
-        //         lexeme: "\0",
-        //     }));
-        // };
         let c = self.chars.next()?;
         let third_state = match c {
             '(' => {
@@ -169,7 +157,7 @@ impl<'a> Iterator for Scanner<'a> {
                 return generate(TokenType::Star, self.line, self.lexeme());
             }
             '\0' => {
-                // self.current += c.len_utf8();
+                println!("eof");
                 return generate(TokenType::Eof, self.line, self.lexeme());
             }
             '!' | '=' | '<' | '>' => ThirdState::OrEquals(c),

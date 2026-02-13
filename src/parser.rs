@@ -94,7 +94,7 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&self) -> Option<&Result<Token<'a>, Error>> {
-        self.scanner.get(self.pos + 1)
+        self.scanner.get(self.pos)
     }
 
     fn advance(&mut self) -> Result<&Token<'a>, &Error> {
@@ -108,37 +108,52 @@ impl<'a> Parser<'a> {
                 kind: TokenType::Number(e),
                 ..
             }) => Tree::Atom(Atom::Number(e.clone())),
+
             Ok(Token {
-                kind: TokenType::Dot | TokenType::Plus,
+                kind: TokenType::Star | TokenType::Plus,
                 ..
             }) => Tree::Op(Op::Plus),
+
             Err(e) => {
                 todo!()
             }
-            _ => panic!(),
+            x => {
+                println!("x value: {:?}", x);
+                panic!()
+            }
         };
+        // match lhs {
+        //     Tree::Atom(_) => self.pos += 1,
+        //     _ => {}
+        // };
         self.pos += 1;
+
         loop {
             let op_result = match self.peek() {
+                Some(Ok(Token {
+                    kind: TokenType::Eof,
+                    ..
+                })) => {
+                    break;
+                }
                 Some(Ok(tok)) => tok.lexeme,
                 Some(Err(_)) => {
                     break;
                 }
-
                 None => {
                     println!("none");
                     break;
                 }
             };
+
             match op_result {
                 op @ ("+" | "-" | "/" | "*") => {
                     if let Some((l_bp, r_bp)) = infix_binding_power(op) {
-                        println!("l_bp: {}", l_bp);
-                        println!("op: {}", op);
                         if l_bp < min_bp {
                             break;
                         }
                         self.advance();
+                        self.pos += 1;
                         let rhs = self.parse_expresion(r_bp)?;
                         lhs = Tree::NonTerm(op, vec![lhs, rhs]);
                     };
@@ -172,7 +187,6 @@ impl<'a> Parser<'a> {
                 _ => break,
             }
         }
-        println!("broke");
         Ok(lhs)
     }
 }
