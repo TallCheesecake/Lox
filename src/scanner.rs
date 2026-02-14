@@ -111,6 +111,7 @@ impl<'a> Iterator for Scanner<'a> {
         self.current = self.code[self.chars.as_str().len()..].len();
         self.start = self.current;
         let c = self.chars.next()?;
+
         let third_state = match c {
             '(' => {
                 self.current += c.len_utf8();
@@ -316,10 +317,12 @@ impl<'a> Scanner<'a> {
     }
 }
 
-pub fn collect(input: &str) -> Vec<Result<Token<'_>, Error>> {
-    Scanner::new(input)
-        .into_iter()
-        .map(|e| e)
-        .collect::<Vec<Result<Token, Error>>>()
+pub fn collect(input: &str) -> Result<Vec<Token<'_>>, Error> {
+    let mut iter = Scanner::new(input).into_iter();
+    let mut tokens = Vec::new();
+    while let Some(res) = iter.next() {
+        let token = res?;
+        tokens.push(token);
+    }
+    Ok(tokens)
 }
-//I think this only copies one

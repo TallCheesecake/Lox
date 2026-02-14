@@ -1,21 +1,20 @@
 use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
-use miette::{Error, LabeledSpan};
+use miette::{Error, LabeledSpan, Severity, miette};
 use std::fmt::Display;
 
 #[derive(Debug)]
 pub enum Tree<'a> {
     Nil,
     Atom(Atom<'a>),
-    NonTerm(&'a str, Vec<Tree<'a>>),
+    NonTerm(scanner::TokenType, Vec<Tree<'a>>),
     Op(Op),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Atom<'a> {
     String(&'a str),
-
     Number(f64),
     Nil,
     Bool(bool),
@@ -53,173 +52,121 @@ pub enum Op {
 
 #[derive(Debug)]
 pub struct Parser<'a> {
-    pub scanner: Vec<Result<Token<'a>, Error>>,
+    pub stream: Vec<Token<'a>>,
     pub pos: usize,
 }
 
-fn is_atom<'a>(input: &scanner::Token<'a>) -> (Atom<'a>, bool) {
-    match input.kind {
-        TokenType::Number(x) => (Atom::Number(x.clone()), true),
-        TokenType::True => (Atom::Bool(true), true),
-        TokenType::False => (Atom::Bool(false), true),
-        TokenType::Super => (Atom::Super, true),
-        TokenType::Star => (Atom::This, true),
-        TokenType::Slash => (Atom::Nil, true),
-        TokenType::Plus => (Atom::String(input.lexeme), true),
-        TokenType::Nil => (Atom::String(input.lexeme), true),
-        _ => todo!(),
-    }
-}
-
-fn is_op<'a>(input: &'a scanner::Token<'a>) -> (Op, bool) {
-    match input.kind {
-        TokenType::Minus => (Op::Minus, true),
-        TokenType::Star => (Op::Star, true),
-        TokenType::Slash => (Op::Slash, true),
-        TokenType::Plus => (Op::Plus, true),
-        _ => todo!(),
-    }
-}
-
 impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Parser<'a> {
-        Parser {
-            scanner: scanner::collect(input),
+    pub fn new(input: &'a str) -> Result<Parser<'a>, Error> {
+        let scanner = scanner::collect(input)?;
+        Ok(Parser {
+            stream: scanner,
             pos: 0,
-        }
+        })
+    }
+    pub fn advance(&mut self) -> Token<'a> {
+        let output = self.stream.get(self.pos).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
+        self.pos += 1;
+        output
     }
 
-    fn current(&self) -> Result<&Token<'a>, &Error> {
-        self.scanner.get(self.pos).unwrap().as_ref()
+    // behave like peek()
+    pub fn peek(&mut self) -> Token<'a> {
+        self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
     }
 
-    fn peek(&self) -> Option<&Result<Token<'a>, Error>> {
-        self.scanner.get(self.pos)
-    }
-
-    fn advance(&mut self) -> Result<&Token<'a>, &Error> {
-        let current = self.current();
-        current
-    }
-
-    pub fn parse_expresion(&mut self, min_bp: u8) -> miette::Result<Tree<'a>, Error> {
+    // make a lhs and call parse_inner
+    pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
         let mut lhs = match self.advance() {
-            Ok(Token {
-                kind: TokenType::Number(e),
+            //TODO: Learn more about this syntax
+            n @ Token {
+                kind: TokenType::Plus | TokenType::Minus,
                 ..
-            }) => Tree::Atom(Atom::Number(e.clone())),
-
-            Ok(Token {
-                kind: TokenType::Star | TokenType::Plus,
-                ..
-            }) => Tree::Op(Op::Plus),
-
-            Err(e) => {
-                todo!()
+            } => {
+                let ((), bp) = prefix_binding_power(&n.kind);
+                let rhs = self.parse_expr(bp)?;
+                Tree::NonTerm(n.kind, vec![rhs])
             }
-            x => {
-                println!("x value: {:?}", x);
-                panic!()
+            n @ Token {
+                kind: TokenType::Identifier,
+                ..
+            } => Tree::Atom(Atom::Ident(n.lexeme)),
+            Token {
+                kind: TokenType::Number(a),
+                ..
+            } => Tree::Atom(Atom::Number(a as f64)),
+            e => {
+                let source = String::from(e.lexeme);
+                return Err(miette!(
+                    severity = Severity::Error,
+                    help = "This is a syntax error",
+                    labels = vec![LabeledSpan::at_offset(0, "here")],
+                    "Unexpected Token"
+                )
+                .with_source_code(source));
             }
         };
-        // match lhs {
-        //     Tree::Atom(_) => self.pos += 1,
-        //     _ => {}
-        // };
-        self.pos += 1;
-
         loop {
-            let op_result = match self.peek() {
-                Some(Ok(Token {
+            println!("peek: {}", self.peek());
+
+            let op = match self.peek() {
+                Token {
                     kind: TokenType::Eof,
                     ..
-                })) => {
+                } => {
                     break;
                 }
-                Some(Ok(tok)) => tok.lexeme,
-                Some(Err(_)) => {
-                    break;
-                }
-                None => {
-                    println!("none");
+                n @ Token {
+                    kind: TokenType::Plus | TokenType::Minus | TokenType::Slash | TokenType::Star,
+                    ..
+                } => n,
+                _ => {
                     break;
                 }
             };
 
-            match op_result {
-                op @ ("+" | "-" | "/" | "*") => {
-                    if let Some((l_bp, r_bp)) = infix_binding_power(op) {
-                        if l_bp < min_bp {
-                            break;
-                        }
-                        self.advance();
-                        self.pos += 1;
-                        let rhs = self.parse_expresion(r_bp)?;
-                        lhs = Tree::NonTerm(op, vec![lhs, rhs]);
-                    };
-                    continue;
+            if let Some((l_bp, r_bp)) = infix_binding_power(&op.kind) {
+                println!("l_bp: {:?}", l_bp);
+                if l_bp < min_bp {
+                    println!("broke in compar");
+                    break;
                 }
-                "[" => {
-                    if let Some((l_bp, _)) = postfix_binding_power("[") {
-                        if l_bp < min_bp {
-                            break;
-                        }
-                        self.advance();
+                self.advance();
+                let rhs = self.parse_expr(r_bp)?;
+                println!("rhs: {:?}", rhs);
+                lhs = Tree::NonTerm(op.kind, vec![lhs, rhs]);
 
-                        let rhs = self.parse_expresion(0)?;
-
-                        match self.advance() {
-                            Ok(tok) if tok.lexeme == "]" => {
-                                lhs = Tree::NonTerm("[", vec![lhs, rhs]);
-                            }
-                            Ok(tok) => {
-                                return Err(miette::miette! {
-                                    labels = vec![LabeledSpan::at_offset(tok.lexeme.len(), "here")],
-                                    "expected ']', found '{}'",
-                                    tok.lexeme
-                                });
-                            }
-                            Err(_) => break, // _ => {
-                        }
-                    }
-                    continue;
-                }
-                _ => break,
+                continue;
             }
+            break;
         }
         Ok(lhs)
     }
 }
 
-//this is a really good idea from: https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
-fn prefix_binding_power(op: &str) -> Option<((), u8)> {
-    assert!(op.len() == 1);
-    //The assert garantees
-    let op = op.chars().next().expect("critical error");
+fn prefix_binding_power(op: &scanner::TokenType) -> ((), u8) {
     match op {
-        '+' | '-' => Some(((), 5)),
+        TokenType::Plus | TokenType::Minus => ((), 5),
+        _ => {
+            panic!("woops bad token this should be a error")
+        }
+    }
+}
+
+fn infix_binding_power(op: &scanner::TokenType) -> Option<(u8, u8)> {
+    //The assert garantees
+    match op {
+        TokenType::Plus | TokenType::Minus => Some((1, 2)),
+        TokenType::Star | TokenType::Slash => Some((3, 4)),
         _ => None,
     }
 }
 
-fn infix_binding_power(op: &str) -> Option<(u8, u8)> {
-    assert!(op.len() == 1);
+fn postfix_binding_power(op: &scanner::TokenType) -> Option<(u8, ())> {
     //The assert garantees
-    let op = op.chars().next().expect("critical error");
     match op {
-        '+' | '-' => Some((1, 2)),
-        '*' | '/' => Some((3, 4)),
-        _ => None,
-    }
-}
-
-fn postfix_binding_power(op: &str) -> Option<(u8, ())> {
-    assert!(op.len() == 1);
-    //The assert garantees
-    let op = op.chars().next().expect("critical error");
-    match op {
-        '!' => Some((11, ())),
-        '[' => Some((11, ())),
+        TokenType::Bang => Some((11, ())),
+        TokenType::LeftBrace => Some((11, ())),
         _ => None,
     }
 }

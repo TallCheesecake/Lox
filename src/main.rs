@@ -25,8 +25,9 @@ mod scanner;
 //     },
 // }
 //
-fn main() {
-    let mut p = parser::Parser::new("1 + 1 * 1\0");
-    let output = p.parse_expresion(0).unwrap();
+fn main() -> miette::Result<()> {
+    let mut p = parser::Parser::new("1/2 + 1 * 8\0")?;
+    let output = p.parse_expr(0)?;
     println!("{:?}", output);
+    Ok(())
 }
