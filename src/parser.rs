@@ -2,6 +2,7 @@ use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
 use miette::{Error, LabeledSpan, Severity, miette};
+use std::collections::TryReserveError;
 use std::fmt::Display;
 
 #[derive(Debug)]
@@ -70,6 +71,9 @@ impl<'a> Parser<'a> {
         output
     }
 
+    pub fn current(&mut self) -> Token<'a> {
+        self.stream.get(self.pos - 1 ).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
+    }
     // behave like peek()
     pub fn peek(&mut self) -> Token<'a> {
         self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
@@ -78,9 +82,8 @@ impl<'a> Parser<'a> {
     // make a lhs and call parse_inner
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
         let mut lhs = match self.advance() {
-            //TODO: Learn more about this syntax
             n @ Token {
-                kind: TokenType::Plus | TokenType::Minus,
+                kind: TokenType::Plus | TokenType::Minus | TokenType::Bang,
                 ..
             } => {
                 let ((), bp) = prefix_binding_power(&n.kind);
@@ -106,6 +109,7 @@ impl<'a> Parser<'a> {
                 .with_source_code(source));
             }
         };
+
         loop {
             println!("peek: {}", self.peek());
 
@@ -117,7 +121,13 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 n @ Token {
-                    kind: TokenType::Plus | TokenType::Minus | TokenType::Slash | TokenType::Star,
+                    kind:
+                        TokenType::Plus
+                        | TokenType::LeftBrace
+                        | TokenType::LeftHardBrace
+                        | TokenType::Minus
+                        | TokenType::Slash
+                        | TokenType::Star,
                     ..
                 } => n,
                 _ => {
@@ -125,10 +135,36 @@ impl<'a> Parser<'a> {
                 }
             };
 
+            if let Some((l_bp, ())) = postfix_binding_power(&op.kind) {
+                if l_bp < min_bp {
+                    break;
+                }
+                self.advance();
+                lhs = if op.kind == TokenType::LeftHardBrace {
+                    let temp = op.lexeme.to_string();
+                    let rhs = self.parse_expr(0)?;
+                    if self.peek().kind != TokenType::RightHardBrace {
+                        panic!();
+                        let source = String::from(format!("{temp} ... EXPECTING CLOSING: ]"));
+                        return Err(miette!(
+                            severity = Severity::Error,
+                            help = "This is a syntax error",
+                            labels = vec![LabeledSpan::at_offset(0, "here")],
+                            "Missing Closing ]"
+                        )
+                        .with_source_code(source));
+                    }
+                    Tree::NonTerm(op.kind, vec![lhs, rhs])
+                } else {
+                    Tree::NonTerm(op.kind, vec![lhs])
+                };
+                continue;
+            }
+
+            //INFIX
             if let Some((l_bp, r_bp)) = infix_binding_power(&op.kind) {
                 println!("l_bp: {:?}", l_bp);
                 if l_bp < min_bp {
-                    println!("broke in compar");
                     break;
                 }
                 self.advance();
@@ -166,7 +202,7 @@ fn postfix_binding_power(op: &scanner::TokenType) -> Option<(u8, ())> {
     //The assert garantees
     match op {
         TokenType::Bang => Some((11, ())),
-        TokenType::LeftBrace => Some((11, ())),
+        TokenType::LeftHardBrace => Some((11, ())),
         _ => None,
     }
 }
@@ -174,8 +210,20 @@ fn postfix_binding_power(op: &scanner::TokenType) -> Option<(u8, ())> {
 impl<'a> std::fmt::Display for Tree<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            r => {
-                write!(f, "{:?}", r)
+            Tree::Atom(x) => {
+                write!(f, "{:?}", x)
+            }
+            Tree::NonTerm(parent, children) => {
+                //NOTE: remeber the error u had
+                //here this was really interesting (stack overflow)
+                write!(f, "({}", parent)?;
+                for i in children {
+                    write!(f, ", {}", i)?
+                }
+                write!(f, ")")
+            }
+            _ => {
+                unimplemented!()
             }
         }
     }

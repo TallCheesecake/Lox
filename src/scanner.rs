@@ -19,10 +19,17 @@ impl std::fmt::Display for MyBad {
     }
 }
 
+impl std::fmt::Display for TokenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
 #[derive(PartialEq, Debug, Copy, Clone)]
 pub enum TokenType {
     LeftParen,
     RightParen,
+    LeftHardBrace,
+    RightHardBrace,
     LeftBrace,
     RightBrace,
     Comma,
@@ -120,6 +127,14 @@ impl<'a> Iterator for Scanner<'a> {
             ')' => {
                 self.current += c.len_utf8();
                 return generate(TokenType::RightParen, self.line, self.lexeme());
+            }
+            '[' => {
+                self.current += c.len_utf8();
+                return generate(TokenType::LeftHardBrace, self.line, self.lexeme());
+            }
+            ']' => {
+                self.current += c.len_utf8();
+                return generate(TokenType::RightHardBrace, self.line, self.lexeme());
             }
             '{' => {
                 self.current += c.len_utf8();
