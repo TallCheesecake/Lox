@@ -28,7 +28,7 @@ mod scanner;
 fn main() -> miette::Result<()> {
     // let mut p = parser::Parser::new("-8 + 1\0")?;
     // let mut p_post = parser::Parser::new("1/2 + 1 * 8\0")?;
-    let mut p = parser::Parser::new("1!\0")?;
+    let mut p = parser::Parser::new("(4 + (2 +1 ))\0")?;
     let sec_out = p.parse_expr(0)?;
     println!("{}", sec_out);
     Ok(())

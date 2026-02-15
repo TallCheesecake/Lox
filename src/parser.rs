@@ -78,7 +78,10 @@ impl<'a> Parser<'a> {
     pub fn peek(&mut self) -> Token<'a> {
         self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
     }
-
+    pub fn parse_statment(&mut self) -> Result<Tree<'a>, Error> {
+        assert_eq!(self.current().lexeme, "for");
+        self.parse_expr(0);
+    }
     // make a lhs and call parse_inner
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
         let mut lhs = match self.advance() {
@@ -89,6 +92,13 @@ impl<'a> Parser<'a> {
                 let ((), bp) = prefix_binding_power(&n.kind);
                 let rhs = self.parse_expr(bp)?;
                 Tree::NonTerm(n.kind, vec![rhs])
+            }
+            n @ Token {
+                kind: TokenType::LeftParen,
+                ..
+            } => {
+                let lhs = self.parse_expr(0)?;
+                lhs
             }
             n @ Token {
                 kind: TokenType::Identifier,
@@ -135,6 +145,8 @@ impl<'a> Parser<'a> {
                 }
             };
 
+            //NOTE: I don't belive the standard lox language has postfix but
+            //I might add some in the future
             if let Some((l_bp, ())) = postfix_binding_power(&op.kind) {
                 if l_bp < min_bp {
                     break;
@@ -174,11 +186,39 @@ impl<'a> Parser<'a> {
 
                 continue;
             }
+            //FOR: 2 children, a bracket and a brace
+
+            // if let Some((l_bp, r_bp)) = keywords(&op.kind) {
+            //     println!("l_bp: {:?}", l_bp);
+            //     if l_bp < min_bp {
+            //         break;
+            //     }
+            //     self.advance();
+            //     let rhs = self.parse_expr(r_bp)?;
+            //     println!("rhs: {:?}", rhs);
+            //     lhs = Tree::NonTerm(op.kind, vec![lhs, rhs]);
+            //
+            //     continue;
+            // }
             break;
         }
         Ok(lhs)
     }
 }
+
+// fn logical_operators(op: &scanner::TokenType) -> ((), u8) {}
+//
+// fn keywords(op: &scanner::TokenType) -> Option<(u8, ())> {
+//     match op {
+//         TokenType::For | TokenType::Else => Some(((), 2)),
+//         TokenType::Class | TokenType::Fun => Some(((), 2)),
+//         TokenType::While | TokenType::Var => Some(((), 2)),
+//         TokenType::This | TokenType::Print => Some(((), 2)),
+//         TokenType::Super | TokenType::Return => Some(((), 2)),
+//         TokenType::And | TokenType::If => Some(((), 4)),
+//         _ => None,
+//     }
+// }
 
 fn prefix_binding_power(op: &scanner::TokenType) -> ((), u8) {
     match op {
