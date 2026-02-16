@@ -2,7 +2,7 @@ use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
 use miette::{Error, LabeledSpan, Severity, miette};
-use std::collections::TryReserveError;
+use std::collections::{HashMap, TryReserveError};
 use std::fmt::Display;
 
 #[derive(Debug)]
@@ -57,6 +57,16 @@ pub struct Parser<'a> {
     pub pos: usize,
 }
 
+// #[derive(Eq, PartialEq, Hash)]
+// struct FuncData {
+//     name: String,
+//     num_args: u8,
+// }
+
+// pub struct Functions {
+//     pairs: HashMap<FuncIden, >,
+// }
+//
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Result<Parser<'a>, Error> {
         let scanner = scanner::collect(input)?;
@@ -65,76 +75,49 @@ impl<'a> Parser<'a> {
             pos: 0,
         })
     }
-    pub fn advance(&mut self) -> Token<'a> {
-        let output = self.stream.get(self.pos).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
-        self.pos += 1;
-        output
-    }
-
-    pub fn current(&mut self) -> Token<'a> {
-        self.stream.get(self.pos - 1 ).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
-    }
-    // behave like peek()
-    pub fn peek(&mut self) -> Token<'a> {
-        self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
-    }
-    fn parse_print(&mut self) -> Result<Tree<'a>, Error> {
-        let value = self.peek();
-        if value.kind != TokenType::String {
-            return Err(miette::miette!(
-                help = "This is a syntax error",
-                labels = vec![LabeledSpan::at_offset(0, "here")],
-                "Unexpected Token"
-            ));
-        } else if self.expect_semicolon() {
-            self.advance();
-            return Ok(Tree::Atom(Atom::String(value.lexeme)));
-        } else {
-            let source = String::from(value.lexeme);
-            return Err(miette!(
-                severity = Severity::Error,
-                help = "This is a syntax error",
-                labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
-                "Missing Semicolon ';'"
-            )
-            .with_source_code(source));
-        };
-    }
-
-    //TODO: write a expect function
-    fn expect(&mut self, input: Token<'a>) -> Result<bool, Error> {
-        if self.peek().kind != input.kind {
-            Err(miette::miette!(
-                help = "This is a syntax error",
-                labels = vec![LabeledSpan::at_offset(0, "here")],
-                "Unexpected Token"
-            ))
-        } else {
-            Ok(true)
-        }
-    }
-
-    fn expect_semicolon(&mut self) -> bool {
-        if self.peek().kind != TokenType::Semicolon {
-            false
-        } else {
-            true
-        }
-    }
-    pub fn parse_statment(&mut self) -> Result<Tree<'a>, Error> {
-        println!("{:?}", self.peek());
-        let lhs = match self.advance() {
-            n @ Token {
-                kind: TokenType::Print,
-                ..
-            } => self.parse_print()?,
-            _ => {
-                todo!()
-            }
-        };
-        Ok(lhs)
-    }
-    // make a lhs and call parse_inner
+    // pub fn parse_program(&mut self) -> Result<Tree<'a>, Error> {
+    //     let val = self.parse_decl()?;
+    //     if !self.expect(TokenType::Eof)? {
+    //         todo!()
+    //     } else {
+    //         Ok(val)
+    //     }
+    // }
+    // pub fn parse_decl(&mut self) -> Result<Tree<'a>, Error> {
+    //     match self.advance() {
+    //         Token {
+    //             kind: TokenType::Fun,
+    //             ..
+    //         } => {
+    //             let val = self.parse_func_decl()?;
+    //
+    //             if !self.expect(TokenType::Eof)? {
+    //                 todo!()
+    //             } else {
+    //                 Ok(val)
+    //             }
+    //         }
+    //         Token {
+    //             kind: TokenType::Var,
+    //             ..
+    //         } => {
+    //             let val = self.parse_func_decl()?;
+    //
+    //             if !self.expect(TokenType::Eof)? {
+    //                 todo!()
+    //             } else {
+    //                 Ok(val)
+    //             }
+    //         }
+    //         _ => todo!(),
+    //     }
+    // }
+    // // pub fn parse_var_decl(&mut self) -> Result<Tree<'a>, Error> {}
+    // // pub fn parse_func_decl(&mut self) -> Result<Tree<'a>, Error> {}
+    // // pub fn parse_expr_stmt(&mut self) -> Result<Tree<'a>, Error> {}
+    // // pub fn parse_call(&mut self) -> Result<Tree<'a>, Error> {}
+    // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
+    //
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
         let mut lhs = match self.advance() {
             n @ Token {
@@ -145,7 +128,7 @@ impl<'a> Parser<'a> {
                 let rhs = self.parse_expr(bp)?;
                 Tree::NonTerm(n.kind, vec![rhs])
             }
-            n @ Token {
+            Token {
                 kind: TokenType::LeftParen,
                 ..
             } => {
@@ -174,10 +157,9 @@ impl<'a> Parser<'a> {
 
         loop {
             println!("peek: {}", self.peek());
-
             let op = match self.peek() {
                 Token {
-                    kind: TokenType::Eof,
+                    kind: TokenType::Eof | TokenType::Equal,
                     ..
                 } => {
                     break;
@@ -238,7 +220,6 @@ impl<'a> Parser<'a> {
 
                 continue;
             }
-            //FOR: 2 children, a bracket and a brace
 
             // if let Some((l_bp, r_bp)) = keywords(&op.kind) {
             //     println!("l_bp: {:?}", l_bp);
@@ -254,6 +235,137 @@ impl<'a> Parser<'a> {
             // }
             break;
         }
+        Ok(lhs)
+    }
+
+    pub fn advance(&mut self) -> Token<'a> {
+        let output = self.stream.get(self.pos).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
+        self.pos += 1;
+        output
+    }
+    pub fn current(&mut self) -> Token<'a> {
+        self.stream.get(self.pos - 1 ).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
+    }
+    // behave like peek()
+    pub fn peek(&mut self) -> Token<'a> {
+        self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
+    }
+
+    // fn parse_funciton_decl(&mut self, func: &mut Functions) -> Result<Tree<'a>, Error> {
+    //     let value = self.peek();
+    //     //NOTE: I think that this makes it so that you mush declare before use
+    //     if self.expect(TokenType::LeftParen)? {
+    //         Tree::Atom(Atom::Ident(value.lexeme))
+    //     }
+    //     if value.kind != TokenType::Identifier {
+    //         return Err(miette::miette!(
+    //             help = "This is a syntax error",
+    //             labels = vec![LabeledSpan::at_offset(0, "here")],
+    //             "Unexpected Token"
+    //         ));
+    //     } else if self.expect(TokenType::LeftParen)? {
+    //         self.advance();
+    //         let lhs = self.parse_expr(0)?;
+    //         return Ok(Tree::NonTerm(Op::Call));
+    //     } else {
+    //         let source = String::from(value.lexeme);
+    //         return Err(miette!(
+    //             severity = Severity::Error,
+    //             help = "This is a syntax error",
+    //             labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
+    //             "Missing Semicolon ';'"
+    //         )
+    //         .with_source_code(source));
+    //     };
+    // }
+    //
+    fn parse_print(&mut self) -> Result<Tree<'a>, Error> {
+        let value = self.peek();
+        if value.kind != TokenType::String {
+            return Err(miette::miette!(
+                help = "This is a syntax error",
+                labels = vec![LabeledSpan::at_offset(0, "here")],
+                "Unexpected Token"
+            ));
+        } else if self.expect_semicolon() {
+            self.advance();
+            return Ok(Tree::Atom(Atom::String(value.lexeme)));
+        } else {
+            let source = String::from(value.lexeme);
+            return Err(miette!(
+                severity = Severity::Error,
+                help = "This is a syntax error",
+                labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
+                "Missing Semicolon ';'"
+            )
+            .with_source_code(source));
+        };
+    }
+
+    //TODO: write a expect function
+    fn expect(&mut self, input: TokenType) -> Result<bool, Error> {
+        if self.peek().kind != input {
+            Err(miette::miette!(
+                help = "This is a syntax error",
+                labels = vec![LabeledSpan::at_offset(0, "here")],
+                "Unexpected Token"
+            ))
+        } else {
+            Ok(true)
+        }
+    }
+
+    fn expect_semicolon(&mut self) -> bool {
+        if self.peek().kind != TokenType::Semicolon {
+            false
+        } else {
+            true
+        }
+    }
+    pub fn parse_statment(&mut self) -> Result<Tree<'a>, Error> {
+        let lhs = match self.advance() {
+            Token {
+                kind: TokenType::Print,
+                ..
+            } => self.parse_print()?,
+            Token {
+                kind: TokenType::Super,
+                ..
+            } => todo!("parse super"),
+            Token {
+                kind: TokenType::This,
+                ..
+            } => todo!("parse this "),
+            Token {
+                kind: TokenType::Return,
+                ..
+            } => todo!("parse return "),
+            Token {
+                kind: TokenType::Else,
+                ..
+            } => todo!("parse Else"),
+            Token {
+                kind: TokenType::Class,
+                ..
+            } => todo!("parse class"),
+            Token {
+                kind: TokenType::For,
+                ..
+            } => todo!("parse for"),
+            Token {
+                kind: TokenType::While,
+                ..
+            } => todo!("parse while"),
+            Token {
+                kind: TokenType::If,
+                ..
+            } => todo!("parse if"),
+            Token {
+                kind: TokenType::LeftBrace,
+                ..
+            } => todo!("parse block"),
+            _ => todo!(),
+        };
         Ok(lhs)
     }
 }
