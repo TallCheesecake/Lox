@@ -3,7 +3,6 @@ use crate::scanner::{self, Token};
 use core::panic;
 use miette::{Error, LabeledSpan, Severity, miette};
 use std::collections::{HashMap, TryReserveError};
-use std::fmt::Display;
 
 #[derive(Debug)]
 pub enum Tree<'a> {
@@ -120,6 +119,42 @@ impl<'a> Parser<'a> {
     //
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
         let mut lhs = match self.advance() {
+            Token {
+                kind: TokenType::String,
+                lexeme,
+                ..
+            } => Tree::Atom(Atom::String(lexeme)),
+            Token {
+                kind: TokenType::Number(n),
+                ..
+            } => Tree::Atom(Atom::Number(n)),
+            Token {
+                kind: TokenType::True,
+                ..
+            } => Tree::Atom(Atom::Bool(true)),
+            Token {
+                kind: TokenType::False,
+                ..
+            } => Tree::Atom(Atom::Bool(false)),
+            Token {
+                kind: TokenType::Nil,
+                ..
+            } => Tree::Atom(Atom::Nil),
+            Token {
+                kind: TokenType::Identifier,
+                lexeme,
+                ..
+            } => Tree::Atom(Atom::Ident(lexeme)),
+            Token {
+                kind: TokenType::Super,
+                ..
+            } => Tree::Atom(Atom::Super),
+
+            Token {
+                kind: TokenType::This,
+                ..
+            } => Tree::Atom(Atom::This),
+
             n @ Token {
                 kind: TokenType::Plus | TokenType::Minus | TokenType::Bang,
                 ..
@@ -133,16 +168,18 @@ impl<'a> Parser<'a> {
                 ..
             } => {
                 let lhs = self.parse_expr(0)?;
-                lhs
+                let source = self.current().lexeme.to_string();
+                if !self.expect(TokenType::RightParen)? {
+                    return Err(miette!(
+                        severity = Severity::Error,
+                        help = "This is a syntax error",
+                        labels = vec![LabeledSpan::at_offset(0, "here")],
+                        "Unexpected Token"
+                    )
+                    .with_source_code(source));
+                }
+                Tree::NonTerm(Op::Group, vec![lhs])
             }
-            n @ Token {
-                kind: TokenType::Identifier,
-                ..
-            } => Tree::Atom(Atom::Ident(n.lexeme)),
-            Token {
-                kind: TokenType::Number(a),
-                ..
-            } => Tree::Atom(Atom::Number(a as f64)),
             e => {
                 let source = String::from(e.lexeme);
                 return Err(miette!(
