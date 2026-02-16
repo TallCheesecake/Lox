@@ -3,12 +3,17 @@ use crate::scanner::{self, Token};
 use core::panic;
 use miette::{Error, LabeledSpan, Severity, miette};
 use std::collections::{HashMap, TryReserveError};
+use std::fmt::write;
 
 #[derive(Debug)]
 pub enum Tree<'a> {
     Nil,
+    Call {
+        callee: Box<Tree<'a>>,
+        arguments: Vec<Tree<'a>>,
+    },
     Atom(Atom<'a>),
-    NonTerm(scanner::TokenType, Vec<Tree<'a>>),
+    NonTerm(Op, Vec<Tree<'a>>),
     Op(Op),
 }
 
@@ -23,7 +28,58 @@ pub enum Atom<'a> {
     This,
     Error,
 }
-
+impl From<Op> for TokenType {
+    fn from(value: Op) -> Self {
+        match value {
+            Op::Minus => TokenType::Minus,
+            Op::Plus => TokenType::Plus,
+            Op::Star => TokenType::Star,
+            Op::BangEqual => TokenType::BangEqual,
+            Op::EqualEqual => TokenType::EqualEqual,
+            Op::LessEqual => TokenType::LessEqual,
+            Op::GreaterEqual => TokenType::GreaterEqual,
+            Op::Less => TokenType::Less,
+            Op::Greater => TokenType::Greater,
+            Op::Slash => TokenType::Slash,
+            Op::Bang => TokenType::Bang,
+            Op::And => TokenType::And,
+            Op::Or => TokenType::Or,
+            Op::For => TokenType::For,
+            Op::Class => TokenType::Class,
+            Op::Print => TokenType::Print,
+            Op::Return => TokenType::Return,
+            Op::Var => TokenType::Var,
+            Op::While => TokenType::While,
+            _ => unreachable!(),
+        }
+    }
+}
+impl Into<Op> for TokenType {
+    fn into(self) -> Op {
+        match self {
+            TokenType::LeftParen => Op::Group,
+            TokenType::Minus => Op::Minus,
+            TokenType::Plus => Op::Plus,
+            TokenType::Slash => Op::Slash,
+            TokenType::Star => Op::Star,
+            TokenType::Bang => Op::Bang,
+            TokenType::BangEqual => Op::BangEqual,
+            TokenType::EqualEqual => Op::EqualEqual,
+            TokenType::Greater => Op::Greater,
+            TokenType::GreaterEqual => Op::GreaterEqual,
+            TokenType::Less => Op::Less,
+            TokenType::LessEqual => Op::LessEqual,
+            TokenType::And => Op::And,
+            TokenType::Class => Op::Class,
+            TokenType::Or => Op::Or,
+            TokenType::Print => Op::Print,
+            TokenType::Return => Op::Return,
+            TokenType::Var => Op::Var,
+            TokenType::While => Op::While,
+            _ => unreachable!(),
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Op {
     Minus,
@@ -118,6 +174,7 @@ impl<'a> Parser<'a> {
     // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
     //
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
+        println!("177");
         let mut lhs = match self.advance() {
             Token {
                 kind: TokenType::String,
@@ -156,12 +213,12 @@ impl<'a> Parser<'a> {
             } => Tree::Atom(Atom::This),
 
             n @ Token {
-                kind: TokenType::Plus | TokenType::Minus | TokenType::Bang,
+                kind: TokenType::Minus | TokenType::Bang,
                 ..
             } => {
                 let ((), bp) = prefix_binding_power(&n.kind);
                 let rhs = self.parse_expr(bp)?;
-                Tree::NonTerm(n.kind, vec![rhs])
+                Tree::NonTerm(n.kind.into(), vec![rhs])
             }
             Token {
                 kind: TokenType::LeftParen,
@@ -191,16 +248,25 @@ impl<'a> Parser<'a> {
                 .with_source_code(source));
             }
         };
-
         loop {
-            println!("peek: {}", self.peek());
             let op = match self.peek() {
                 Token {
-                    kind: TokenType::Eof | TokenType::Equal,
+                    kind:
+                        TokenType::Eof
+                        | TokenType::Equal
+                        | TokenType::RightParen
+                        | TokenType::Comma
+                        | TokenType::RightBrace
+                        | TokenType::Semicolon,
                     ..
                 } => {
                     break;
                 }
+
+                n @ Token {
+                    kind: TokenType::LeftParen,
+                    ..
+                } => n,
                 n @ Token {
                     kind:
                         TokenType::Plus
@@ -216,14 +282,13 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            //NOTE: I don't belive the standard lox language has postfix but
-            //I might add some in the future
             if let Some((l_bp, ())) = postfix_binding_power(&op.kind) {
                 if l_bp < min_bp {
                     break;
                 }
                 self.advance();
                 lhs = if op.kind == TokenType::LeftHardBrace {
+                    println!("290");
                     let temp = op.lexeme.to_string();
                     let rhs = self.parse_expr(0)?;
                     if self.peek().kind != TokenType::RightHardBrace {
@@ -237,24 +302,25 @@ impl<'a> Parser<'a> {
                         )
                         .with_source_code(source));
                     }
-                    Tree::NonTerm(op.kind, vec![lhs, rhs])
+
+                    Tree::NonTerm(op.kind.into(), vec![lhs, rhs])
                 } else {
-                    Tree::NonTerm(op.kind, vec![lhs])
+                    Tree::NonTerm(op.kind.into(), vec![lhs])
                 };
                 continue;
             }
 
             //INFIX
             if let Some((l_bp, r_bp)) = infix_binding_power(&op.kind) {
-                println!("l_bp: {:?}", l_bp);
                 if l_bp < min_bp {
                     break;
                 }
                 self.advance();
                 let rhs = self.parse_expr(r_bp)?;
-                println!("rhs: {:?}", rhs);
-                lhs = Tree::NonTerm(op.kind, vec![lhs, rhs]);
 
+                println!("kind: {:?}", <TokenType as Into<Op>>::into(op.kind));
+                println!("kind: {:?}", op.kind);
+                lhs = Tree::NonTerm(op.kind.into(), vec![lhs, rhs]);
                 continue;
             }
 
@@ -447,7 +513,39 @@ fn postfix_binding_power(op: &scanner::TokenType) -> Option<(u8, ())> {
         _ => None,
     }
 }
-
+//https://github.com/jonhoo/lox/blob/master/src/parse.rs
+impl std::fmt::Display for Op {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Op::Minus => "-",
+                Op::Plus => "+",
+                Op::Star => "*",
+                Op::BangEqual => "!=",
+                Op::EqualEqual => "==",
+                Op::LessEqual => "<=",
+                Op::GreaterEqual => ">=",
+                Op::Less => "<",
+                Op::Greater => ">",
+                Op::Slash => "/",
+                Op::Bang => "!",
+                Op::And => "and",
+                Op::Or => "or",
+                Op::For => "for",
+                Op::Class => "class",
+                Op::Print => "print",
+                Op::Return => "return",
+                Op::Field => ".",
+                Op::Var => "var",
+                Op::While => "while",
+                Op::Call => "call",
+                Op::Group => "group",
+            }
+        )
+    }
+}
 impl<'a> std::fmt::Display for Tree<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -455,8 +553,6 @@ impl<'a> std::fmt::Display for Tree<'a> {
                 write!(f, "{:?}", x)
             }
             Tree::NonTerm(parent, children) => {
-                //NOTE: remeber the error u had
-                //here this was really interesting (stack overflow)
                 write!(f, "({}", parent)?;
                 for i in children {
                     write!(f, ", {}", i)?
