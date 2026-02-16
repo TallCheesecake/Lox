@@ -266,6 +266,7 @@ impl<'a> Iterator for Scanner<'a> {
                 }
                 self.current = self.code[self.chars.as_str().len()..].len();
                 let index = self.lexeme();
+                println!("lexem: {index}");
                 if let Some(c) = self.keywords.get_mut(&(index)) {
                     return generate(*c, self.line, self.lexeme());
                 } else {

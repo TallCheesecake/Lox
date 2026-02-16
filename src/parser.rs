@@ -78,9 +78,61 @@ impl<'a> Parser<'a> {
     pub fn peek(&mut self) -> Token<'a> {
         self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
     }
+    fn parse_print(&mut self) -> Result<Tree<'a>, Error> {
+        let value = self.peek();
+        if value.kind != TokenType::String {
+            return Err(miette::miette!(
+                help = "This is a syntax error",
+                labels = vec![LabeledSpan::at_offset(0, "here")],
+                "Unexpected Token"
+            ));
+        } else if self.expect_semicolon() {
+            self.advance();
+            return Ok(Tree::Atom(Atom::String(value.lexeme)));
+        } else {
+            let source = String::from(value.lexeme);
+            return Err(miette!(
+                severity = Severity::Error,
+                help = "This is a syntax error",
+                labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
+                "Missing Semicolon ';'"
+            )
+            .with_source_code(source));
+        };
+    }
+
+    //TODO: write a expect function
+    fn expect(&mut self, input: Token<'a>) -> Result<bool, Error> {
+        if self.peek().kind != input.kind {
+            Err(miette::miette!(
+                help = "This is a syntax error",
+                labels = vec![LabeledSpan::at_offset(0, "here")],
+                "Unexpected Token"
+            ))
+        } else {
+            Ok(true)
+        }
+    }
+
+    fn expect_semicolon(&mut self) -> bool {
+        if self.peek().kind != TokenType::Semicolon {
+            false
+        } else {
+            true
+        }
+    }
     pub fn parse_statment(&mut self) -> Result<Tree<'a>, Error> {
-        assert_eq!(self.current().lexeme, "for");
-        self.parse_expr(0);
+        println!("{:?}", self.peek());
+        let lhs = match self.advance() {
+            n @ Token {
+                kind: TokenType::Print,
+                ..
+            } => self.parse_print()?,
+            _ => {
+                todo!()
+            }
+        };
+        Ok(lhs)
     }
     // make a lhs and call parse_inner
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
