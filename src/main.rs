@@ -1,34 +1,54 @@
-// use clap::{Parser, Subcommand};
-// use miette::{Context, Error, Result};
+use std::{ffi::OsString, fs};
+
 mod exe;
 mod parser;
 mod scanner;
-// use std::{
-//     ffi::{OsStr, OsString},
-//     fs,
-// };
-//
-//
-// /// A fictional versioning CLI
-// #[derive(Debug, Parser)] // requires `derive` feature
-// #[command(name = "git")]
-// #[command(about = "A fictional versioning CLI", long_about = None)]
-// struct Cli {
-//     #[command(subcommand)]
-//     command: Commands,
-// }
-// #[derive(Debug, Subcommand)]
-// enum Commands {
-//     #[command(arg_required_else_help = true)]
-//     Input {
-//         #[arg(value_name = "PATH")]
-//         path: Option<OsString>,
-//     },
-// }
-//
-fn main() -> miette::Result<()> {
-    let mut p = parser::Parser::new("print \"Hello World\";\0")?;
-    let sec_out = p.parse_statment()?;
-    exe::print_execute(sec_out);
+
+struct Args {
+    file: Option<OsString>,
+}
+
+fn parse_args() -> Result<Args, lexopt::Error> {
+    use lexopt::prelude::*;
+    let mut file = None;
+    let mut parser = lexopt::Parser::from_env();
+    while let Some(arg) = parser.next()? {
+        match arg {
+            Value(val) if file.is_none() => {
+                file = Some(val);
+            }
+            Long("help") => {
+                println!("Usage: file-path");
+                std::process::exit(0);
+            }
+            _ => return Err(arg.unexpected()),
+        }
+    }
+    Ok(Args {
+        file: file.or_else(|| None),
+    })
+}
+
+fn hello(args: Args) -> Result<(), miette::Error> {
+    if args.file.is_some() {
+        let contents = match fs::read_to_string(args.file.unwrap()) {
+            Ok(r) => r,
+            Err(_) => return Err(miette::miette!("io error")),
+        };
+        // println!("{contents}");
+        let mut p = parser::Parser::new(contents.as_str())?;
+        let out = p.parse_statment()?;
+        exe::print_execute(out);
+    } else {
+        eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
+    }
     Ok(())
+}
+fn main() -> Result<(), miette::Error> {
+    match parse_args() {
+        Ok(x) => {
+            return Ok(hello(x)?);
+        }
+        Err(_) => return Err(miette::miette!("hello")),
+    };
 }
