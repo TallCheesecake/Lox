@@ -3,7 +3,6 @@ use crate::scanner::{self, Token};
 use core::panic;
 use miette::{Error, LabeledSpan, Severity, miette};
 use std::collections::{HashMap, TryReserveError};
-use std::fmt::write;
 
 #[derive(Debug)]
 pub enum Tree<'a> {
@@ -15,6 +14,11 @@ pub enum Tree<'a> {
     Atom(Atom<'a>),
     NonTerm(Op, Vec<Tree<'a>>),
     Op(Op),
+    Fun {
+        name: Box<Tree<'a>>,
+        parameters: Vec<Tree<'a>>,
+        body: Box<Tree<'a>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -170,7 +174,36 @@ impl<'a> Parser<'a> {
     // // pub fn parse_var_decl(&mut self) -> Result<Tree<'a>, Error> {}
     // // pub fn parse_func_decl(&mut self) -> Result<Tree<'a>, Error> {}
     // // pub fn parse_expr_stmt(&mut self) -> Result<Tree<'a>, Error> {}
-    // // pub fn parse_call(&mut self) -> Result<Tree<'a>, Error> {}
+    // pub fn parse_call(&mut self) -> Result<Tree<'a>, Error> {
+    //     let value = self.peek();
+    //     if self.expect(TokenType::Identifier) {
+    //         return Ok(Tree::Call {
+    //             callee: Box::new(self.parse_expr(0)?),
+    //             arguments: vec![self.parse_expr(0)?],
+    //         });
+    //     };
+    //
+    //     if value.kind != TokenType::Identifier {
+    //         return Err(miette::miette!(
+    //             help = "This is a syntax error",
+    //             labels = vec![LabeledSpan::at_offset(0, "here")],
+    //             "Unexpected Token"
+    //         ));
+    //     } else if self.expect(TokenType::LeftParen)? {
+    //         self.advance();
+    //         let lhs = self.parse_expr(0)?;
+    //         return Ok(Tree::NonTerm(Op::Call));
+    //     } else {
+    //         let source = String::from(value.lexeme);
+    //         return Err(miette!(
+    //             severity = Severity::Error,
+    //             help = "This is a syntax error",
+    //             labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
+    //             "Missing Semicolon ';'"
+    //         )
+    //         .with_source_code(source));
+    //     };
+    // }
     // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
     //
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
@@ -356,7 +389,7 @@ impl<'a> Parser<'a> {
     // fn parse_funciton_decl(&mut self, func: &mut Functions) -> Result<Tree<'a>, Error> {
     //     let value = self.peek();
     //     //NOTE: I think that this makes it so that you mush declare before use
-    //     if self.expect(TokenType::LeftParen)? {
+    //     if self.expect(TokenType::LeftParen) {
     //         Tree::Atom(Atom::Ident(value.lexeme))
     //     }
     //     if value.kind != TokenType::Identifier {
@@ -420,12 +453,69 @@ impl<'a> Parser<'a> {
             true
         }
     }
+    pub fn parse_block(&mut self) -> Result<Tree<'a>, Error> {
+        let value = self.peek();
+        if self.expect(TokenType::LeftBrace) {
+            return Err(miette::miette!("expected left paren for block"));
+        } else {
+            if self.expect(TokenType::RightParen) {
+                return Ok(Tree::NonTerm(Op::Group, vec![]));
+            }
+            return Ok(self.parse_expr(0)?);
+        };
+    }
     pub fn parse_statment(&mut self) -> Result<Tree<'a>, Error> {
         let lhs = match self.advance() {
             Token {
                 kind: TokenType::Print,
                 ..
             } => self.parse_print()?,
+            Token {
+                kind: TokenType::Fun,
+                ..
+            } => {
+                if !self.expect(TokenType::Identifier) {
+                    return Err(miette!("expected funciton name"));
+                } else {
+                    let next = self.peek();
+                    self.advance();
+                    let func_name = next.lexeme;
+                    let func_iden = Tree::Atom(Atom::Ident(func_name));
+                    let mut temp = Vec::new();
+                    if !self.expect(TokenType::LeftParen) {
+                        return Err(miette!("expected paren name"));
+                    } else {
+                        self.advance();
+                        println!("seeeing ( {}", self.current());
+                        if self.expect(TokenType::RightParen) {
+                            self.advance();
+                            {}
+                        } else {
+                            loop {
+                                println!("hello");
+                                if self.expect(TokenType::Comma) {
+                                    println!("comma");
+                                    self.advance();
+                                } else if !self.expect(TokenType::Comma)
+                                    && self.current().kind != TokenType::RightParen
+                                {
+                                    temp.push(self.parse_expr(0)?);
+                                } else {
+                                    break;
+                                };
+                                self.advance();
+                            }
+                        };
+                    };
+                    self.advance();
+                    let block = self.parse_block()?;
+                    return Ok(Tree::Fun {
+                        name: Box::new(func_iden),
+                        parameters: temp,
+                        body: Box::new(block),
+                    });
+                };
+            }
             Token {
                 kind: TokenType::Super,
                 ..
@@ -462,7 +552,7 @@ impl<'a> Parser<'a> {
                 kind: TokenType::LeftBrace,
                 ..
             } => todo!("parse block"),
-            _ => todo!(),
+            _ => todo!("cant parse"),
         };
         Ok(lhs)
     }
@@ -508,7 +598,7 @@ fn postfix_binding_power(op: &scanner::TokenType) -> Option<(u8, ())> {
         _ => None,
     }
 }
-//https://github.com/jonhoo/lox/blob/master/src/parse.rs
+
 impl std::fmt::Display for Op {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -541,6 +631,7 @@ impl std::fmt::Display for Op {
         )
     }
 }
+
 impl<'a> std::fmt::Display for Tree<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -555,6 +646,7 @@ impl<'a> std::fmt::Display for Tree<'a> {
                 write!(f, ")")
             }
             _ => {
+                println!("hello");
                 unimplemented!()
             }
         }

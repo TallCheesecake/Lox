@@ -1,1 +1,1 @@
-print "Hello World"
+fun hello(a , c) { a + c }
