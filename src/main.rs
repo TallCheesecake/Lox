@@ -1,5 +1,6 @@
 // use clap::{Parser, Subcommand};
 // use miette::{Context, Error, Result};
+mod exe;
 mod parser;
 mod scanner;
 // use std::{
@@ -26,9 +27,8 @@ mod scanner;
 // }
 //
 fn main() -> miette::Result<()> {
-    // let mut p = parser::Parser::new("print \"hello world\"\0")?;
-    let mut p = parser::Parser::new("(1 + (1))\0")?;
-    let sec_out = p.parse_expr(0)?;
-    println!("{}", sec_out);
+    let mut p = parser::Parser::new("print \"Hello World\";\0")?;
+    let sec_out = p.parse_statment()?;
+    exe::print_execute(sec_out);
     Ok(())
 }

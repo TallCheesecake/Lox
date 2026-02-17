@@ -174,7 +174,6 @@ impl<'a> Parser<'a> {
     // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
     //
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
-        println!("177");
         let mut lhs = match self.advance() {
             Token {
                 kind: TokenType::String,
@@ -225,13 +224,13 @@ impl<'a> Parser<'a> {
                 ..
             } => {
                 let lhs = self.parse_expr(0)?;
-                let source = self.current().lexeme.to_string();
-                if !self.expect(TokenType::RightParen)? {
+                let source = format!("{} {}", self.prev().lexeme, self.peek().lexeme);
+                if !self.expect(TokenType::RightParen) {
                     return Err(miette!(
                         severity = Severity::Error,
-                        help = "This is a syntax error",
-                        labels = vec![LabeledSpan::at_offset(0, "here")],
-                        "Unexpected Token"
+                        help = "Always close your parenthesis",
+                        labels = vec![LabeledSpan::at_offset(1, "here")],
+                        "Expected Right Paren"
                     )
                     .with_source_code(source));
                 }
@@ -241,7 +240,7 @@ impl<'a> Parser<'a> {
                 let source = String::from(e.lexeme);
                 return Err(miette!(
                     severity = Severity::Error,
-                    help = "This is a syntax error",
+                    help = "hi is a syntax error",
                     labels = vec![LabeledSpan::at_offset(0, "here")],
                     "Unexpected Token"
                 )
@@ -288,7 +287,6 @@ impl<'a> Parser<'a> {
                 }
                 self.advance();
                 lhs = if op.kind == TokenType::LeftHardBrace {
-                    println!("290");
                     let temp = op.lexeme.to_string();
                     let rhs = self.parse_expr(0)?;
                     if self.peek().kind != TokenType::RightHardBrace {
@@ -296,7 +294,7 @@ impl<'a> Parser<'a> {
                         let source = String::from(format!("{temp} ... EXPECTING CLOSING: ]"));
                         return Err(miette!(
                             severity = Severity::Error,
-                            help = "This is a syntax error",
+                            help = "hello is a syntax error",
                             labels = vec![LabeledSpan::at_offset(0, "here")],
                             "Missing Closing ]"
                         )
@@ -317,9 +315,6 @@ impl<'a> Parser<'a> {
                 }
                 self.advance();
                 let rhs = self.parse_expr(r_bp)?;
-
-                println!("kind: {:?}", <TokenType as Into<Op>>::into(op.kind));
-                println!("kind: {:?}", op.kind);
                 lhs = Tree::NonTerm(op.kind.into(), vec![lhs, rhs]);
                 continue;
             }
@@ -341,6 +336,10 @@ impl<'a> Parser<'a> {
         Ok(lhs)
     }
 
+    pub fn prev(&mut self) -> Token<'a> {
+        let output = self.stream.get(self.pos - 1).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
+        output
+    }
     pub fn advance(&mut self) -> Token<'a> {
         let output = self.stream.get(self.pos).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
         self.pos += 1;
@@ -382,15 +381,16 @@ impl<'a> Parser<'a> {
     //     };
     // }
     //
-    fn parse_print(&mut self) -> Result<Tree<'a>, Error> {
+    pub fn parse_print(&mut self) -> Result<Tree<'a>, Error> {
         let value = self.peek();
+        // println!("{:?}", value);
         if value.kind != TokenType::String {
             return Err(miette::miette!(
                 help = "This is a syntax error",
                 labels = vec![LabeledSpan::at_offset(0, "here")],
                 "Unexpected Token"
             ));
-        } else if self.expect_semicolon() {
+        } else if !self.expect_semicolon() {
             self.advance();
             return Ok(Tree::Atom(Atom::String(value.lexeme)));
         } else {
@@ -405,16 +405,11 @@ impl<'a> Parser<'a> {
         };
     }
 
-    //TODO: write a expect function
-    fn expect(&mut self, input: TokenType) -> Result<bool, Error> {
+    fn expect(&mut self, input: TokenType) -> bool {
         if self.peek().kind != input {
-            Err(miette::miette!(
-                help = "This is a syntax error",
-                labels = vec![LabeledSpan::at_offset(0, "here")],
-                "Unexpected Token"
-            ))
+            false
         } else {
-            Ok(true)
+            true
         }
     }
 
