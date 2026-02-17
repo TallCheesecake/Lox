@@ -414,6 +414,7 @@ impl<'a> Parser<'a> {
     //     };
     // }
     //
+    //TODO: Make print and retrun part of the pratt system as unary prefixes
     pub fn parse_print(&mut self) -> Result<Tree<'a>, Error> {
         let value = self.peek();
         // println!("{:?}", value);
@@ -453,6 +454,7 @@ impl<'a> Parser<'a> {
             true
         }
     }
+
     pub fn parse_block(&mut self) -> Result<Tree<'a>, Error> {
         let value = self.peek();
         if self.expect(TokenType::LeftBrace) {
@@ -539,7 +541,23 @@ impl<'a> Parser<'a> {
             Token {
                 kind: TokenType::For,
                 ..
-            } => todo!("parse for"),
+            } => {
+                if self.expect(TokenType::LeftParen) {
+                    let var = self.parse_expr(0)?;
+                    if !self.expect_semicolon() {
+                        return Err(miette!("expected a ; to start the for loop"));
+                    }
+                    let cond = self.parse_expr(0)?;
+                    if !self.expect_semicolon() {
+                        return Err(miette!("expected a ; to start the for loop"));
+                    }
+                    let inc = self.parse_expr(0)?;
+                    let block = self.parse_block()?;
+                    return Ok(Tree::NonTerm(Op::For, vec![var, cond, inc, block]));
+                } else {
+                    return Err(miette!("expected a ( to start the for loop"));
+                };
+            }
             Token {
                 kind: TokenType::While,
                 ..
@@ -581,22 +599,31 @@ fn prefix_binding_power(op: &scanner::TokenType) -> ((), u8) {
     }
 }
 
-fn infix_binding_power(op: &scanner::TokenType) -> Option<(u8, u8)> {
-    //The assert garantees
-    match op {
-        TokenType::Plus | TokenType::Minus => Some((1, 2)),
-        TokenType::Star | TokenType::Slash => Some((3, 4)),
-        _ => None,
-    }
+fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
+    let res = match op {
+        // '=' => (2, 1),
+        // '?' => (4, 3),
+        Op::And | Op::Or => (3, 4),
+        Op::BangEqual
+        | Op::EqualEqual
+        | Op::Less
+        | Op::LessEqual
+        | Op::Greater
+        | Op::GreaterEqual => (5, 6),
+        Op::Plus | Op::Minus => (7, 8),
+        Op::Star | Op::Slash => (9, 10),
+        Op::Field => (16, 15),
+        _ => return None,
+    };
+    Some(res)
 }
 
-fn postfix_binding_power(op: &scanner::TokenType) -> Option<(u8, ())> {
-    //The assert garantees
-    match op {
-        TokenType::Bang => Some((11, ())),
-        TokenType::LeftHardBrace => Some((11, ())),
-        _ => None,
-    }
+fn postfix_binding_power(op: Op) -> Option<(u8, ())> {
+    let res = match op {
+        Op::Call => (13, ()),
+        _ => return None,
+    };
+    Some(res)
 }
 
 impl std::fmt::Display for Op {
