@@ -1,5 +1,4 @@
 use std::{ffi::OsString, fs};
-
 mod exe;
 mod parser;
 mod scanner;
@@ -7,7 +6,6 @@ mod scanner;
 struct Args {
     file: Option<OsString>,
 }
-
 fn parse_args() -> Result<Args, lexopt::Error> {
     use lexopt::prelude::*;
     let mut file = None;
@@ -18,8 +16,9 @@ fn parse_args() -> Result<Args, lexopt::Error> {
                 file = Some(val);
             }
             Long("help") => {
-                println!("Usage: file-path");
-                std::process::exit(0);
+                println!(
+                    "Usage: provide a file-path as the first pos arg \nExample: rlox main.lox"
+                );
             }
             _ => return Err(arg.unexpected()),
         }
@@ -35,7 +34,6 @@ fn hello(args: Args) -> Result<(), miette::Error> {
             Ok(r) => r,
             Err(_) => return Err(miette::miette!("io error")),
         };
-        // println!("{contents}");
         let mut p = parser::Parser::new(contents.as_str())?;
         let out = p.parse_statment()?;
         exe::print_execute(out);

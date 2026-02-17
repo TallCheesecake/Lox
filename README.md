@@ -1,3 +1,6 @@
 # Lox-Interp-Rust
 
-This project is currently on hold while I work on a C version.
+Currently only deps are: Lexopt and miette
+
+## **Use** 
+clone down, build, run as a binary
