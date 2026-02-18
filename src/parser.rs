@@ -1,13 +1,10 @@
+//TODO: Parse expresion statments properly
 use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
 use miette::{Context, Diagnostic, Result, SourceSpan};
-use miette::{Error, LabeledSpan, miette};
-use std::any::Any;
 use std::collections::HashMap;
-use std::io::Stdout;
 use std::ops::Range;
-use std::panic::PanicInfo;
 use std::sync::Arc;
 
 #[derive(Debug, Diagnostic)]
@@ -154,17 +151,6 @@ pub struct Parser {
     pub input: Arc<String>,
     pub pos: usize,
 }
-
-// #[derive(Eq, PartialEq, Hash)]
-// struct FuncData {
-//     name: String,
-//     num_args: u8,
-// }
-
-// pub struct Functions {
-//     pairs: HashMap<FuncIden, >,
-// }
-//
 impl Parser {
     pub fn new(input: String) -> Result<Parser, miette::Report> {
         let stream = scanner::collect(&input)?;
@@ -183,6 +169,7 @@ impl Parser {
     //         Ok(val)
     //     }
     // }
+    //
     // pub fn parse_decl(&mut self) -> Result<Tree<'a>, Error> {
     //     match self.advance() {
     //         Token {
@@ -212,9 +199,9 @@ impl Parser {
     //         _ => todo!(),
     //     }
     // }
-    // // pub fn parse_var_decl(&mut self) -> Result<Tree<'a>, Error> {}
-    // // pub fn parse_func_decl(&mut self) -> Result<Tree<'a>, Error> {}
+    //
     // // pub fn parse_expr_stmt(&mut self) -> Result<Tree<'a>, Error> {}
+    //
     // pub fn parse_call(&mut self) -> Result<Tree<'a>, Error> {
     //     let value = self.peek();
     //     if self.expect(TokenType::Identifier) {
@@ -321,8 +308,11 @@ impl Parser {
                         | TokenType::LeftParen
                         | TokenType::LeftBrace
                         | TokenType::LeftHardBrace
+                        | TokenType::BangEqual
+                        | TokenType::EqualEqual
                         | TokenType::Minus
-                        | TokenType::Less
+                        | TokenType::GreaterEqual
+                        | TokenType::Greater
                         | TokenType::LessEqual
                         | TokenType::Slash
                         | TokenType::Star,
@@ -593,17 +583,17 @@ impl Parser {
                     let var = self.parse_statment()?;
                     if !self.expect_semicolon() {
                         return self.error("Expected a ;");
-                    }
+                    };
                     self.advance();
                     let cond = self.parse_expr(0)?;
                     if !self.expect_semicolon() {
                         return self.error("Expected a ;");
-                    }
+                    };
                     self.advance();
                     let inc = self.parse_expr(0)?;
                     if !self.expect(TokenType::RightParen) {
                         return self.error("Expected a )");
-                    }
+                    };
                     self.advance();
                     println!("prev blcok {:?}", self.peek());
                     let block = self.parse_statment()?;
@@ -620,29 +610,45 @@ impl Parser {
                 println!("L paren: {:?}", self.peek());
                 if !self.expect(TokenType::LeftParen) {
                     return self.error("Expected a (");
-                } else {
-                    self.advance();
-                    let cond = self.parse_expr(0)?;
-                    println!("Right paren: {:?}", self.peek());
-                    if !self.expect(TokenType::RightParen) {
-                        return self.error("Expected a )");
-                    } else {
-                        self.advance();
-                        println!("L Brace: {:?}", self.peek());
-                        if !self.expect(TokenType::LeftBrace) {
-                            println!("insize error");
-                            return self.error("Expected a {");
-                        } else {
-                            let block = self.parse_statment()?;
-                            Tree::NonTerm(Op::While, vec![cond, block])
-                        }
-                    }
-                }
+                };
+                self.advance();
+                let cond = self.parse_expr(0)?;
+                println!("Right paren: {:?}", self.peek());
+                if !self.expect(TokenType::RightParen) {
+                    return self.error("Expected a )");
+                };
+                self.advance();
+                println!("L Brace: {:?}", self.peek());
+                if !self.expect(TokenType::LeftBrace) {
+                    println!("insize error");
+                    return self.error("Expected a {");
+                };
+                let block = self.parse_statment()?;
+                Tree::NonTerm(Op::While, vec![cond, block])
             }
             Token {
                 kind: TokenType::If,
                 ..
-            } => todo!("parse if"),
+            } => {
+                println!("L paren: {:?}", self.peek());
+                if !self.expect(TokenType::LeftParen) {
+                    return self.error("Expected a (");
+                };
+                self.advance();
+                let cond = self.parse_expr(0)?;
+                println!("Right paren: {:?}", self.peek());
+                if !self.expect(TokenType::RightParen) {
+                    return self.error("Expected a )");
+                };
+                self.advance();
+                println!("L Brace: {:?}", self.peek());
+                if !self.expect(TokenType::LeftBrace) {
+                    println!("insize error");
+                    return self.error("Expected a {");
+                };
+                let block = self.parse_statment()?;
+                Tree::NonTerm(Op::While, vec![cond, block])
+            }
             Token {
                 kind: TokenType::LeftBrace,
                 ..
@@ -669,20 +675,6 @@ impl Parser {
         Ok(lhs)
     }
 }
-
-// fn logical_operators(op: &scanner::TokenType) -> ((), u8) {}
-//
-// fn keywords(op: &scanner::TokenType) -> Option<(u8, ())> {
-//     match op {
-//         TokenType::For | TokenType::Else => Some(((), 2)),
-//         TokenType::Class | TokenType::Fun => Some(((), 2)),
-//         TokenType::While | TokenType::Var => Some(((), 2)),
-//         TokenType::This | TokenType::Print => Some(((), 2)),
-//         TokenType::Super | TokenType::Return => Some(((), 2)),
-//         TokenType::And | TokenType::If => Some(((), 4)),
-//         _ => None,
-//     }
-// }
 
 fn prefix_binding_power(op: &scanner::TokenType) -> ((), u8) {
     match op {
@@ -772,7 +764,6 @@ impl std::fmt::Display for Tree {
             Tree::Atom(x) => {
                 write!(f, "{}", x)
             }
-
             Tree::NonTerm(parent, children) => {
                 write!(f, "({}", parent)?;
 
@@ -805,6 +796,7 @@ impl std::fmt::Display for Tree {
     }
 }
 
+//TODO: Write tests im tired of doing this by hand
 #[cfg(test)]
 mod tests {
     use super::*;
