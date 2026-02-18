@@ -1,6 +1,7 @@
 use miette::{Diagnostic, Error, Result, SourceSpan};
 use std::collections::HashMap;
 use std::fmt::Display;
+use std::ops::Range;
 use std::str::Chars;
 
 #[derive(Debug, Diagnostic)]
@@ -76,19 +77,18 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Token<'a> {
+#[derive(Clone, Debug)]
+pub struct Token {
     pub kind: TokenType,
-    pub line: usize,
-    pub lexeme: &'a str,
+    pub range: Range<usize>,
 }
 
 //TODO: make the eof function a method of scnner
-impl<'a> Display for Token<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.lexeme)
-    }
-}
+// impl<'a> Display for Token<'a> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "{}", &self.lexeme)
+//     }
+// }
 
 pub struct Scanner<'a> {
     keywords: HashMap<&'a str, TokenType>,
@@ -100,7 +100,7 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Iterator for Scanner<'a> {
-    type Item = miette::Result<Token<'a>, miette::Error>;
+    type Item = miette::Result<Token, miette::Error>;
     fn next(&mut self) -> Option<Self::Item> {
         pub enum ThirdState {
             OrEquals(char),
@@ -110,71 +110,73 @@ impl<'a> Iterator for Scanner<'a> {
         }
         //TODO: make 2 error types
         let generate =
-            |kind: TokenType, line: usize, lexeme: &'a str| -> Option<Result<Token<'a>, Error>> {
-                Some(Ok(Token { kind, line, lexeme }))
+            |kind: TokenType, end: usize, start: usize| -> Option<Result<Token, Error>> {
+                Some(Ok(Token {
+                    kind,
+                    range: Range { start, end },
+                }))
             };
 
         self.handle_whitespace();
         self.current = self.code[self.chars.as_str().len()..].len();
         self.start = self.current;
         let c = self.chars.next()?;
-
         let third_state = match c {
             '(' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::LeftParen, self.line, self.lexeme());
+                return generate(TokenType::LeftParen, self.current, self.start);
             }
             ')' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::RightParen, self.line, self.lexeme());
+                return generate(TokenType::RightParen, self.current, self.start);
             }
             '[' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::LeftHardBrace, self.line, self.lexeme());
+                return generate(TokenType::LeftHardBrace, self.current, self.start);
             }
             ']' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::RightHardBrace, self.line, self.lexeme());
+                return generate(TokenType::RightHardBrace, self.current, self.start);
             }
             '{' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::LeftBrace, self.line, self.lexeme());
+                return generate(TokenType::LeftBrace, self.current, self.start);
             }
             '}' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::RightBrace, self.line, self.lexeme());
+                return generate(TokenType::RightBrace, self.current, self.start);
             }
             ';' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::Semicolon, self.line, self.lexeme());
+                return generate(TokenType::Semicolon, self.current, self.start);
             }
             ',' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::Comma, self.line, self.lexeme());
+                return generate(TokenType::Comma, self.current, self.start);
             }
             '.' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::Dot, self.line, self.lexeme());
+                return generate(TokenType::Dot, self.current, self.start);
             }
             '-' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::Minus, self.line, self.lexeme());
+                return generate(TokenType::Minus, self.current, self.start);
             }
             '+' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::Plus, self.line, self.lexeme());
+                return generate(TokenType::Plus, self.current, self.start);
             }
             '/' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::Slash, self.line, self.lexeme());
+                return generate(TokenType::Slash, self.current, self.start);
             }
             '*' => {
                 self.current += c.len_utf8();
-                return generate(TokenType::Star, self.line, self.lexeme());
+                return generate(TokenType::Star, self.current, self.start);
             }
             '\0' => {
                 // println!("eof");
-                return generate(TokenType::Eof, self.line, self.lexeme());
+                return generate(TokenType::Eof, self.current, self.start);
             }
             '!' | '=' | '<' | '>' => ThirdState::OrEquals(c),
             'A'..='Z' | 'a'..='z' => ThirdState::Iden,
@@ -190,15 +192,15 @@ impl<'a> Iterator for Scanner<'a> {
         };
 
         let mut comparator_handle =
-            |kind: TokenType, kind2: TokenType| -> Option<Result<Token<'a>, Error>> {
+            |kind: TokenType, kind2: TokenType| -> Option<Result<Token, Error>> {
                 {
                     if self.first() == '=' {
                         self.chars.next()?;
                         self.current = self.code[self.chars.as_str().len()..].len();
-                        return generate(kind, self.line, self.lexeme());
+                        return generate(kind, self.current, self.start);
                     } else {
                         self.current = self.code[self.chars.as_str().len()..].len();
-                        return generate(kind2, self.line, self.lexeme());
+                        return generate(kind2, self.current, self.start);
                     }
                 }
             };
@@ -232,9 +234,9 @@ impl<'a> Iterator for Scanner<'a> {
                 if let Some(c) = self.chars.find(|&x| x == '"') {
                     if c == '"' {
                         self.current = self.code[self.chars.as_str().len()..].len();
-                        return generate(TokenType::String, self.line, self.lexeme());
+                        return generate(TokenType::String, self.current, self.start);
                     } else {
-                        return generate(TokenType::String, self.line, self.lexeme());
+                        return generate(TokenType::String, self.current, self.start);
                     }
                 }
             }
@@ -254,7 +256,7 @@ impl<'a> Iterator for Scanner<'a> {
                 self.current = self.code[self.chars.as_str().len()..].len();
                 match self.lexeme().parse::<f64>() {
                     Ok(x) => {
-                        return generate(TokenType::Number(x), self.line, self.lexeme());
+                        return generate(TokenType::Number(x), self.current, self.start);
                     }
                     Err(x) => eprintln!("{}", x),
                 }
@@ -268,9 +270,9 @@ impl<'a> Iterator for Scanner<'a> {
                 let index = self.lexeme();
                 // println!("lexem: {index}");
                 if let Some(c) = self.keywords.get_mut(&(index)) {
-                    return generate(*c, self.line, self.lexeme());
+                    return generate(*c, self.current, self.start);
                 } else {
-                    return generate(TokenType::Identifier, self.line, self.lexeme());
+                    return generate(TokenType::Identifier, self.current, self.start);
                 }
             }
         };
@@ -333,7 +335,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-pub fn collect(input: &str) -> Result<Vec<Token<'_>>, Error> {
+pub fn collect(input: &str) -> Result<Vec<Token>, Error> {
     let mut iter = Scanner::new(input).into_iter();
     let mut tokens = Vec::new();
     while let Some(res) = iter.next() {

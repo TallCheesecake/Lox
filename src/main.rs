@@ -34,14 +34,15 @@ fn hello(args: Args) -> Result<(), miette::Error> {
             Ok(r) => r,
             Err(_) => return Err(miette::miette!("io error")),
         };
-        let mut p = parser::Parser::new(contents.as_str())?;
-        let out = p.parse_statment()?;
-        println!("{:?}", out);
+        let mut parse = parser::Parser::new(contents)?;
+        let output = parse.parse_statment()?;
+        println!("{output}");
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }
     Ok(())
 }
+
 fn main() -> Result<(), miette::Error> {
     match parse_args() {
         Ok(x) => {

@@ -1,33 +1,56 @@
 use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
-use miette::{Error, LabeledSpan, Severity, miette};
-use std::collections::{HashMap, TryReserveError};
+use miette::{Diagnostic, Result, SourceSpan};
+use miette::{Error, LabeledSpan, miette};
+use std::ops::Range;
+use std::sync::Arc;
 
+#[derive(Debug, Diagnostic)]
+#[diagnostic(help("this is a syntax error"))]
+pub struct ParserError {
+    #[source_code]
+    source: Arc<String>,
+    #[label("main issue")]
+    primary_span: SourceSpan,
+}
+
+impl std::error::Error for ParserError {}
+impl std::fmt::Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid token found")
+    }
+}
+fn token_to_span(token: &Token) -> SourceSpan {
+    SourceSpan::new(
+        token.range.start.into(),
+        (token.range.end - token.range.start).into(),
+    )
+}
 #[derive(Debug)]
-pub enum Tree<'a> {
+pub enum Tree {
     Nil,
     Call {
-        callee: Box<Tree<'a>>,
-        arguments: Vec<Tree<'a>>,
+        callee: Box<Tree>,
+        arguments: Vec<Tree>,
     },
-    Atom(Atom<'a>),
-    NonTerm(Op, Vec<Tree<'a>>),
+    Atom(Atom),
+    NonTerm(Op, Vec<Tree>),
     Op(Op),
     Fun {
-        name: Box<Tree<'a>>,
-        parameters: Vec<Tree<'a>>,
-        body: Box<Tree<'a>>,
+        name: Box<Tree>,
+        parameters: Vec<Tree>,
+        body: Box<Tree>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Atom<'a> {
-    String(&'a str),
+pub enum Atom {
+    String(Range<usize>),
     Number(f64),
     Nil,
     Bool(bool),
-    Ident(&'a str),
+    Ident(Range<usize>),
     Super,
     This,
     Error,
@@ -111,8 +134,9 @@ pub enum Op {
 }
 
 #[derive(Debug)]
-pub struct Parser<'a> {
-    pub stream: Vec<Token<'a>>,
+pub struct Parser {
+    pub stream: Vec<Token>,
+    pub input: Arc<String>,
     pub pos: usize,
 }
 
@@ -126,11 +150,12 @@ pub struct Parser<'a> {
 //     pairs: HashMap<FuncIden, >,
 // }
 //
-impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Result<Parser<'a>, Error> {
-        let scanner = scanner::collect(input)?;
+impl Parser {
+    pub fn new(input: String) -> Result<Parser, Error> {
+        let stream = scanner::collect(&input)?;
         Ok(Parser {
-            stream: scanner,
+            stream,
+            input: Arc::new(input),
             pos: 0,
         })
     }
@@ -205,14 +230,12 @@ impl<'a> Parser<'a> {
     //     };
     // }
     // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
-    //
-    pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree<'a>, Error> {
+    pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree, Error> {
         let mut lhs = match self.advance() {
             Token {
                 kind: TokenType::String,
-                lexeme,
-                ..
-            } => Tree::Atom(Atom::String(lexeme)),
+                range: Range { start, end },
+            } => Tree::Atom(Atom::String(Range { start, end })),
             Token {
                 kind: TokenType::Number(n),
                 ..
@@ -231,9 +254,8 @@ impl<'a> Parser<'a> {
             } => Tree::Atom(Atom::Nil),
             Token {
                 kind: TokenType::Identifier,
-                lexeme,
-                ..
-            } => Tree::Atom(Atom::Ident(lexeme)),
+                range: Range { start, end },
+            } => Tree::Atom(Atom::Ident(Range { start, end })),
             Token {
                 kind: TokenType::Super,
                 ..
@@ -257,27 +279,23 @@ impl<'a> Parser<'a> {
                 ..
             } => {
                 let lhs = self.parse_expr(0)?;
-                let source = format!("{} {}", self.prev().lexeme, self.peek().lexeme);
+                // let source = format!("{} {}", self.prev().lexeme, self.peek().lexeme);
                 if !self.expect(TokenType::RightParen) {
-                    return Err(miette!(
-                        severity = Severity::Error,
-                        help = "Always close your parenthesis",
-                        labels = vec![LabeledSpan::at_offset(1, "here")],
-                        "Expected Right Paren"
-                    )
-                    .with_source_code(source));
+                    return Err(ParserError {
+                        source: Arc::clone(&self.input),
+                        primary_span: token_to_span(&self.current()),
+                    }
+                    .into());
                 }
                 Tree::NonTerm(Op::Group, vec![lhs])
             }
-            e => {
-                let source = String::from(e.lexeme);
-                return Err(miette!(
-                    severity = Severity::Error,
-                    help = "hi is a syntax error",
-                    labels = vec![LabeledSpan::at_offset(0, "here")],
-                    "Unexpected Token"
-                )
-                .with_source_code(source));
+            _ => {
+                return Err(ParserError {
+                    //ARC
+                    source: Arc::clone(&self.input),
+                    primary_span: token_to_span(&self.current()),
+                }
+                .into());
             }
         };
         loop {
@@ -314,25 +332,25 @@ impl<'a> Parser<'a> {
                 }
             };
 
-            if let Some((l_bp, ())) = postfix_binding_power(&op.kind) {
+            if let Some((l_bp, ())) = postfix_binding_power(op.kind) {
                 if l_bp < min_bp {
                     break;
                 }
                 self.advance();
                 lhs = if op.kind == TokenType::LeftHardBrace {
-                    let temp = op.lexeme.to_string();
+                    // let temp = op.lexeme.to_string();
                     let rhs = self.parse_expr(0)?;
-                    if self.peek().kind != TokenType::RightHardBrace {
-                        panic!();
-                        let source = String::from(format!("{temp} ... EXPECTING CLOSING: ]"));
-                        return Err(miette!(
-                            severity = Severity::Error,
-                            help = "hello is a syntax error",
-                            labels = vec![LabeledSpan::at_offset(0, "here")],
-                            "Missing Closing ]"
-                        )
-                        .with_source_code(source));
-                    }
+                    // if self.peek().kind != TokenType::RightHardBrace {
+                    //     panic!();
+                    //     let source = String::from(format!("{temp} ... EXPECTING CLOSING: ]"));
+                    //     return Err(miette!(
+                    //         severity = Severity::Error,
+                    //         help = "hello is a syntax error",
+                    //         labels = vec![LabeledSpan::at_offset(0, "here")],
+                    //         "Missing Closing ]"
+                    //     )
+                    //     .with_source_code(source));
+                    // }
 
                     Tree::NonTerm(op.kind.into(), vec![lhs, rhs])
                 } else {
@@ -342,7 +360,7 @@ impl<'a> Parser<'a> {
             }
 
             //INFIX
-            if let Some((l_bp, r_bp)) = infix_binding_power(&op.kind) {
+            if let Some((l_bp, r_bp)) = infix_binding_power(op.kind) {
                 if l_bp < min_bp {
                     break;
                 }
@@ -369,20 +387,20 @@ impl<'a> Parser<'a> {
         Ok(lhs)
     }
 
-    pub fn prev(&mut self) -> Token<'a> {
+    pub fn prev(&mut self) -> Token {
         let output = self.stream.get(self.pos - 1).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
         output
     }
-    pub fn advance(&mut self) -> Token<'a> {
+    pub fn advance(&mut self) -> Token {
         let output = self.stream.get(self.pos).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
         self.pos += 1;
         output
     }
-    pub fn current(&mut self) -> Token<'a> {
+    pub fn current(&mut self) -> Token {
         self.stream.get(self.pos - 1 ).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
     }
     // behave like peek()
-    pub fn peek(&mut self) -> Token<'a> {
+    pub fn peek(&mut self) -> Token {
         self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
     }
 
@@ -415,7 +433,7 @@ impl<'a> Parser<'a> {
     // }
     //
     //TODO: Make print and retrun part of the pratt system as unary prefixes
-    pub fn parse_print(&mut self) -> Result<Tree<'a>, Error> {
+    pub fn parse_print(&mut self) -> Result<Tree, Error> {
         let value = self.peek();
         // println!("{:?}", value);
         if value.kind != TokenType::String {
@@ -426,16 +444,17 @@ impl<'a> Parser<'a> {
             ));
         } else if !self.expect_semicolon() {
             self.advance();
-            return Ok(Tree::Atom(Atom::String(value.lexeme)));
+            return Ok(Tree::Atom(Atom::String(value.range)));
         } else {
-            let source = String::from(value.lexeme);
-            return Err(miette!(
-                severity = Severity::Error,
-                help = "This is a syntax error",
-                labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
-                "Missing Semicolon ';'"
-            )
-            .with_source_code(source));
+            panic!("need to make error")
+            // let source = String::from(v);
+            // return Err(miette!(
+            //     severity = Severity::Error,
+            //     help = "This is a syntax error",
+            //     labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
+            //     "Missing Semicolon ';'"
+            // )
+            // .with_source_code(source));
         };
     }
 
@@ -455,7 +474,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parse_block(&mut self) -> Result<Tree<'a>, Error> {
+    pub fn parse_block(&mut self) -> Result<Tree, Error> {
         let value = self.peek();
         if self.expect(TokenType::LeftBrace) {
             return Err(miette::miette!("expected left paren for block"));
@@ -466,7 +485,7 @@ impl<'a> Parser<'a> {
             return Ok(self.parse_expr(0)?);
         };
     }
-    pub fn parse_statment(&mut self) -> Result<Tree<'a>, Error> {
+    pub fn parse_statment(&mut self) -> Result<Tree, Error> {
         let lhs = match self.advance() {
             Token {
                 kind: TokenType::Print,
@@ -481,14 +500,13 @@ impl<'a> Parser<'a> {
                 } else {
                     let next = self.peek();
                     self.advance();
-                    let func_name = next.lexeme;
-                    let func_iden = Tree::Atom(Atom::Ident(func_name));
+                    let func_iden = Tree::Atom(Atom::Ident(next.range));
                     let mut temp = Vec::new();
                     if !self.expect(TokenType::LeftParen) {
                         return Err(miette!("expected paren name"));
                     } else {
                         self.advance();
-                        println!("seeeing ( {}", self.current());
+                        println!("seeing ( {:?}", self.current());
                         if self.expect(TokenType::RightParen) {
                             self.advance();
                             {}
@@ -599,8 +617,8 @@ fn prefix_binding_power(op: &scanner::TokenType) -> ((), u8) {
     }
 }
 
-fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
-    let res = match op {
+fn infix_binding_power(op: scanner::TokenType) -> Option<(u8, u8)> {
+    let res = match op.into() {
         // '=' => (2, 1),
         // '?' => (4, 3),
         Op::And | Op::Or => (3, 4),
@@ -618,8 +636,8 @@ fn infix_binding_power(op: Op) -> Option<(u8, u8)> {
     Some(res)
 }
 
-fn postfix_binding_power(op: Op) -> Option<(u8, ())> {
-    let res = match op {
+fn postfix_binding_power(op: scanner::TokenType) -> Option<(u8, ())> {
+    let res = match op.into() {
         Op::Call => (13, ()),
         _ => return None,
     };
@@ -659,7 +677,7 @@ impl std::fmt::Display for Op {
     }
 }
 
-impl<'a> std::fmt::Display for Tree<'a> {
+impl std::fmt::Display for Tree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Tree::Atom(x) => {
