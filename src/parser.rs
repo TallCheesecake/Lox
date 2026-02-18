@@ -4,6 +4,8 @@ use core::panic;
 use miette::{Context, Diagnostic, Result, SourceSpan};
 use miette::{Error, LabeledSpan, miette};
 use std::any::Any;
+use std::collections::HashMap;
+use std::io::Stdout;
 use std::ops::Range;
 use std::panic::PanicInfo;
 use std::sync::Arc;
@@ -29,13 +31,14 @@ fn token_to_span(token: &Token) -> SourceSpan {
         (token.range.end - token.range.start).into(),
     )
 }
+// struct Scope {
+//     parent: Box<Option<Scope>>,
+//     parent: Box<Option<Scope>>,
+// }
 #[derive(Debug)]
 pub enum Tree {
     Nil,
-    Var {
-        name: Box<Atom>,
-        val: Box<Tree>,
-    },
+    Var(String, HashMap<String, Tree>),
     Call {
         callee: Box<Tree>,
         arguments: Vec<Tree>,
@@ -165,6 +168,7 @@ pub struct Parser {
 impl Parser {
     pub fn new(input: String) -> Result<Parser, miette::Report> {
         let stream = scanner::collect(&input)?;
+
         Ok(Parser {
             stream,
             input: Arc::new(input),
@@ -252,10 +256,6 @@ impl Parser {
                 source: Arc::clone(&self.input),
             }),
             Token {
-                kind: TokenType::Var,
-                ..
-            } => self.parse_expr(0)?,
-            Token {
                 kind: TokenType::Number(n),
                 ..
             } => Tree::Atom(Atom::Number(n)),
@@ -278,16 +278,6 @@ impl Parser {
                 range: Range { start, end },
                 source: Arc::clone(&self.input),
             }),
-            Token {
-                kind: TokenType::Super,
-                ..
-            } => Tree::Atom(Atom::Super),
-
-            Token {
-                kind: TokenType::This,
-                ..
-            } => Tree::Atom(Atom::This),
-
             n @ Token {
                 kind: TokenType::Minus | TokenType::Bang,
                 ..
@@ -336,15 +326,14 @@ impl Parser {
                 }
 
                 n @ Token {
-                    kind: TokenType::LeftParen,
-                    ..
-                } => n,
-                n @ Token {
                     kind:
                         TokenType::Plus
+                        | TokenType::LeftParen
                         | TokenType::LeftBrace
                         | TokenType::LeftHardBrace
                         | TokenType::Minus
+                        | TokenType::Less
+                        | TokenType::LessEqual
                         | TokenType::Slash
                         | TokenType::Star,
                     ..
@@ -416,7 +405,10 @@ impl Parser {
     }
 
     pub fn current(&mut self) -> Token {
-        self.stream.get(self.pos - 1 ).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
+        self.stream
+            .get(self.pos - 1)
+            .expect("Invariant broken: if current reached None that means that is bad.")
+            .clone()
     }
 
     // behave like peek()
@@ -512,6 +504,7 @@ impl Parser {
                 .wrap_err("Expected '}' ");
             }
         } else {
+            self.advance();
             return Err(ParserError {
                 source: Arc::clone(&self.input),
                 primary_span: token_to_span(&self.current()),
@@ -581,6 +574,37 @@ impl Parser {
                 ..
             } => todo!("parse super"),
             Token {
+                kind: TokenType::Var,
+                ..
+            } => {
+                //TODO: put this is a field
+                let mut map = HashMap::new();
+                if self.expect(TokenType::Identifier) {
+                    let iden = self.advance();
+                    if self.expect(TokenType::Equal) {
+                        self.advance();
+                        let val = self.parse_expr(0)?;
+                        let key = String::from(&self.input[iden.range.start..=iden.range.end]);
+                        map.insert(key.clone(), val);
+                        Tree::Var(key, map)
+                    } else {
+                        return Err(ParserError {
+                            source: Arc::clone(&self.input),
+                            primary_span: token_to_span(&self.current()),
+                        })
+                        .wrap_err("Please add a = sign after your var identintifier")
+                        .into();
+                    }
+                } else {
+                    return Err(ParserError {
+                        source: Arc::clone(&self.input),
+                        primary_span: token_to_span(&self.current()),
+                    })
+                    .wrap_err("You must add a identifier after var")
+                    .into();
+                }
+            }
+            Token {
                 kind: TokenType::This,
                 ..
             } => todo!("parse this "),
@@ -601,7 +625,8 @@ impl Parser {
                 ..
             } => {
                 if self.expect(TokenType::LeftParen) {
-                    let var = self.parse_expr(0)?;
+                    self.advance();
+                    let var = self.parse_statment()?;
                     if !self.expect_semicolon() {
                         return Err(ParserError {
                             source: Arc::clone(&self.input),
@@ -609,16 +634,28 @@ impl Parser {
                         })
                         .wrap_err("Expected a ';' for a post var declaration");
                     }
+                    self.advance();
                     let cond = self.parse_expr(0)?;
                     if !self.expect_semicolon() {
                         return Err(ParserError {
                             source: Arc::clone(&self.input),
                             primary_span: token_to_span(&self.current()),
                         })
-                        .wrap_err("Expected a ';' for a post inc operation");
+                        .wrap_err("Expected a ';' for a post cond declaration");
                     }
+                    self.advance();
                     let inc = self.parse_expr(0)?;
+                    if !self.expect(TokenType::RightParen) {
+                        return Err(ParserError {
+                            source: Arc::clone(&self.input),
+                            primary_span: token_to_span(&self.current()),
+                        })
+                        .wrap_err("Expected a ')'");
+                    }
+                    self.advance();
+                    println!("prev blcok {:?}", self.peek());
                     let block = self.parse_block()?;
+                    //TODO: That cant be how this is done
                     return Ok(Tree::NonTerm(Op::For, vec![var, cond, inc, block]));
                 } else {
                     return Err(ParserError {
@@ -671,8 +708,6 @@ fn prefix_binding_power(op: &scanner::TokenType) -> ((), u8) {
 
 fn infix_binding_power(op: scanner::TokenType) -> Option<(u8, u8)> {
     let res = match op.into() {
-        // '=' => (2, 1),
-        // '?' => (4, 3),
         Op::And | Op::Or => (3, 4),
         Op::BangEqual
         | Op::EqualEqual
@@ -750,6 +785,7 @@ impl std::fmt::Display for Tree {
             Tree::Atom(x) => {
                 write!(f, "{}", x)
             }
+
             Tree::NonTerm(parent, children) => {
                 write!(f, "({}", parent)?;
 
@@ -771,6 +807,11 @@ impl std::fmt::Display for Tree {
                 }
                 write!(f, ")")?;
                 write!(f, " {{ {} }}", body)
+            }
+
+            Tree::Var(k, x) => {
+                let iden = x.get(k).unwrap();
+                write!(f, "Var:  K: {} V: {} ", k, iden)
             }
             _ => unimplemented!(),
         }
