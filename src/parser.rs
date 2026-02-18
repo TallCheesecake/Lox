@@ -20,7 +20,7 @@ pub struct ParserError {
 impl std::error::Error for ParserError {}
 impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "hello invalid token")
+        write!(f, "invalid or missing token")
     }
 }
 fn token_to_span(token: &Token) -> SourceSpan {
@@ -32,6 +32,10 @@ fn token_to_span(token: &Token) -> SourceSpan {
 #[derive(Debug)]
 pub enum Tree {
     Nil,
+    Var {
+        name: Box<Atom>,
+        val: Box<Tree>,
+    },
     Call {
         callee: Box<Tree>,
         arguments: Vec<Tree>,
@@ -248,6 +252,10 @@ impl Parser {
                 source: Arc::clone(&self.input),
             }),
             Token {
+                kind: TokenType::Var,
+                ..
+            } => self.parse_expr(0)?,
+            Token {
                 kind: TokenType::Number(n),
                 ..
             } => Tree::Atom(Atom::Number(n)),
@@ -293,8 +301,7 @@ impl Parser {
                 ..
             } => {
                 let lhs = self.parse_expr(0)?;
-                // let source = format!("{} {}", self.prev().lexeme, self.peek().lexeme);
-                if !self.expect(TokenType::RightParen) {
+                if self.expect(TokenType::RightParen) {
                     return Err(ParserError {
                         source: Arc::clone(&self.input),
                         primary_span: token_to_span(&self.current()),
@@ -309,7 +316,7 @@ impl Parser {
                     source: Arc::clone(&self.input),
                     primary_span: token_to_span(&self.current()),
                 })
-                .wrap_err("dont even know how you got here")
+                .wrap_err("Expected expresion")
                 .into();
             }
         };
@@ -402,18 +409,16 @@ impl Parser {
         Ok(lhs)
     }
 
-    pub fn prev(&mut self) -> Token {
-        let output = self.stream.get(self.pos - 1).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
-        output
-    }
     pub fn advance(&mut self) -> Token {
         let output = self.stream.get(self.pos).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
         self.pos += 1;
         output
     }
+
     pub fn current(&mut self) -> Token {
         self.stream.get(self.pos - 1 ).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
     }
+
     // behave like peek()
     pub fn peek(&mut self) -> Token {
         self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
@@ -479,37 +484,39 @@ impl Parser {
     }
 
     fn expect(&mut self, input: TokenType) -> bool {
-        if self.peek().kind != input {
-            false
-        } else {
+        if self.peek().kind == input {
             true
+        } else {
+            false
         }
     }
 
     fn expect_semicolon(&mut self) -> bool {
-        if self.peek().kind != TokenType::Semicolon {
-            false
-        } else {
+        if self.peek().kind == TokenType::Semicolon {
             true
+        } else {
+            false
         }
     }
-
     pub fn parse_block(&mut self) -> Result<Tree, miette::Report> {
-        println!("PEEK: {:?}", self.peek());
-        if !self.expect(TokenType::LeftBrace) {
-            println!("after expect: {:?}", self.peek());
+        if self.expect(TokenType::LeftBrace) {
+            self.advance();
+            let middle = self.parse_expr(0)?;
+            if self.expect(TokenType::RightBrace) {
+                return Ok(Tree::NonTerm(Op::Group, vec![middle]));
+            } else {
+                return Err(ParserError {
+                    source: Arc::clone(&self.input),
+                    primary_span: token_to_span(&self.current()),
+                })
+                .wrap_err("Expected '}' ");
+            }
+        } else {
             return Err(ParserError {
                 source: Arc::clone(&self.input),
                 primary_span: token_to_span(&self.current()),
             })
-            .wrap_err("Expected '{' ")
-            .into();
-        } else {
-            if !self.expect(TokenType::RightParen) {
-                return Ok(Tree::NonTerm(Op::Group, vec![]));
-            }
-            eprintln!("one ahead");
-            return Ok(self.parse_expr(0)?);
+            .wrap_err("Expected '{' ");
         };
     }
     pub fn parse_statment(&mut self) -> Result<Tree, miette::Report> {
@@ -523,7 +530,11 @@ impl Parser {
                 ..
             } => {
                 if !self.expect(TokenType::Identifier) {
-                    return Err(miette!("expected funciton name"));
+                    return Err(ParserError {
+                        source: Arc::clone(&self.input),
+                        primary_span: token_to_span(&self.current()),
+                    })
+                    .wrap_err("Expected a funciton name");
                 } else {
                     let range = self.advance().range;
                     let func_iden = Tree::Atom(Atom::Ident {
@@ -592,17 +603,29 @@ impl Parser {
                 if self.expect(TokenType::LeftParen) {
                     let var = self.parse_expr(0)?;
                     if !self.expect_semicolon() {
-                        return Err(miette!("expected a ; to start the for loop"));
+                        return Err(ParserError {
+                            source: Arc::clone(&self.input),
+                            primary_span: token_to_span(&self.current()),
+                        })
+                        .wrap_err("Expected a ';' for a post var declaration");
                     }
                     let cond = self.parse_expr(0)?;
                     if !self.expect_semicolon() {
-                        return Err(miette!("expected a ; to start the for loop"));
+                        return Err(ParserError {
+                            source: Arc::clone(&self.input),
+                            primary_span: token_to_span(&self.current()),
+                        })
+                        .wrap_err("Expected a ';' for a post inc operation");
                     }
                     let inc = self.parse_expr(0)?;
                     let block = self.parse_block()?;
                     return Ok(Tree::NonTerm(Op::For, vec![var, cond, inc, block]));
                 } else {
-                    return Err(miette!("expected a ( to start the for loop"));
+                    return Err(ParserError {
+                        source: Arc::clone(&self.input),
+                        primary_span: token_to_span(&self.current()),
+                    })
+                    .wrap_err("Expected a '(' for a for loop");
                 };
             }
             Token {
