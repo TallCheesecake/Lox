@@ -1,9 +1,11 @@
 use crate::scanner::TokenType;
 use crate::scanner::{self, Token};
 use core::panic;
-use miette::{Diagnostic, Result, SourceSpan};
+use miette::{Context, Diagnostic, Result, SourceSpan};
 use miette::{Error, LabeledSpan, miette};
+use std::any::Any;
 use std::ops::Range;
+use std::panic::PanicInfo;
 use std::sync::Arc;
 
 #[derive(Debug, Diagnostic)]
@@ -18,7 +20,7 @@ pub struct ParserError {
 impl std::error::Error for ParserError {}
 impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid token found")
+        write!(f, "hello invalid token")
     }
 }
 fn token_to_span(token: &Token) -> SourceSpan {
@@ -46,11 +48,17 @@ pub enum Tree {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Atom {
-    String(Range<usize>),
+    Ident {
+        range: Range<usize>,
+        source: Arc<String>,
+    },
+    String {
+        range: Range<usize>,
+        source: Arc<String>,
+    },
     Number(f64),
     Nil,
     Bool(bool),
-    Ident(Range<usize>),
     Super,
     This,
     Error,
@@ -151,7 +159,7 @@ pub struct Parser {
 // }
 //
 impl Parser {
-    pub fn new(input: String) -> Result<Parser, Error> {
+    pub fn new(input: String) -> Result<Parser, miette::Report> {
         let stream = scanner::collect(&input)?;
         Ok(Parser {
             stream,
@@ -230,12 +238,15 @@ impl Parser {
     //     };
     // }
     // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
-    pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree, Error> {
+    pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree, miette::Report> {
         let mut lhs = match self.advance() {
             Token {
                 kind: TokenType::String,
                 range: Range { start, end },
-            } => Tree::Atom(Atom::String(Range { start, end })),
+            } => Tree::Atom(Atom::String {
+                range: Range { start, end },
+                source: Arc::clone(&self.input),
+            }),
             Token {
                 kind: TokenType::Number(n),
                 ..
@@ -255,7 +266,10 @@ impl Parser {
             Token {
                 kind: TokenType::Identifier,
                 range: Range { start, end },
-            } => Tree::Atom(Atom::Ident(Range { start, end })),
+            } => Tree::Atom(Atom::Ident {
+                range: Range { start, end },
+                source: Arc::clone(&self.input),
+            }),
             Token {
                 kind: TokenType::Super,
                 ..
@@ -284,18 +298,19 @@ impl Parser {
                     return Err(ParserError {
                         source: Arc::clone(&self.input),
                         primary_span: token_to_span(&self.current()),
-                    }
-                    .into());
+                    })
+                    .wrap_err("I dont even know how you got here")
+                    .into();
                 }
                 Tree::NonTerm(Op::Group, vec![lhs])
             }
             _ => {
                 return Err(ParserError {
-                    //ARC
                     source: Arc::clone(&self.input),
                     primary_span: token_to_span(&self.current()),
-                }
-                .into());
+                })
+                .wrap_err("dont even know how you got here")
+                .into();
             }
         };
         loop {
@@ -433,18 +448,23 @@ impl Parser {
     // }
     //
     //TODO: Make print and retrun part of the pratt system as unary prefixes
-    pub fn parse_print(&mut self) -> Result<Tree, Error> {
+    pub fn parse_print(&mut self) -> Result<Tree, miette::Report> {
         let value = self.peek();
         // println!("{:?}", value);
         if value.kind != TokenType::String {
-            return Err(miette::miette!(
-                help = "This is a syntax error",
-                labels = vec![LabeledSpan::at_offset(0, "here")],
-                "Unexpected Token"
-            ));
+            return Err(ParserError {
+                source: Arc::clone(&self.input),
+                primary_span: token_to_span(&self.current()),
+            })
+            .wrap_err("dont even know how you got here")
+            .into();
         } else if !self.expect_semicolon() {
-            self.advance();
-            return Ok(Tree::Atom(Atom::String(value.range)));
+            let val = self.advance();
+            let range = val.range;
+            return Ok(Tree::Atom(Atom::Ident {
+                range,
+                source: Arc::clone(&self.input),
+            }));
         } else {
             panic!("need to make error")
             // let source = String::from(v);
@@ -474,18 +494,25 @@ impl Parser {
         }
     }
 
-    pub fn parse_block(&mut self) -> Result<Tree, Error> {
-        let value = self.peek();
-        if self.expect(TokenType::LeftBrace) {
-            return Err(miette::miette!("expected left paren for block"));
+    pub fn parse_block(&mut self) -> Result<Tree, miette::Report> {
+        println!("PEEK: {:?}", self.peek());
+        if !self.expect(TokenType::LeftBrace) {
+            println!("after expect: {:?}", self.peek());
+            return Err(ParserError {
+                source: Arc::clone(&self.input),
+                primary_span: token_to_span(&self.current()),
+            })
+            .wrap_err("Expected '{' ")
+            .into();
         } else {
-            if self.expect(TokenType::RightParen) {
+            if !self.expect(TokenType::RightParen) {
                 return Ok(Tree::NonTerm(Op::Group, vec![]));
             }
+            eprintln!("one ahead");
             return Ok(self.parse_expr(0)?);
         };
     }
-    pub fn parse_statment(&mut self) -> Result<Tree, Error> {
+    pub fn parse_statment(&mut self) -> Result<Tree, miette::Report> {
         let lhs = match self.advance() {
             Token {
                 kind: TokenType::Print,
@@ -498,23 +525,26 @@ impl Parser {
                 if !self.expect(TokenType::Identifier) {
                     return Err(miette!("expected funciton name"));
                 } else {
-                    let next = self.peek();
-                    self.advance();
-                    let func_iden = Tree::Atom(Atom::Ident(next.range));
+                    let range = self.advance().range;
+                    let func_iden = Tree::Atom(Atom::Ident {
+                        range,
+                        source: Arc::clone(&self.input),
+                    });
                     let mut temp = Vec::new();
                     if !self.expect(TokenType::LeftParen) {
-                        return Err(miette!("expected paren name"));
+                        return Err(ParserError {
+                            source: Arc::clone(&self.input),
+                            primary_span: token_to_span(&self.current()),
+                        }
+                        .into());
                     } else {
                         self.advance();
-                        println!("seeing ( {:?}", self.current());
                         if self.expect(TokenType::RightParen) {
                             self.advance();
                             {}
                         } else {
                             loop {
-                                println!("hello");
                                 if self.expect(TokenType::Comma) {
-                                    println!("comma");
                                     self.advance();
                                 } else if !self.expect(TokenType::Comma)
                                     && self.current().kind != TokenType::RightParen
@@ -527,7 +557,6 @@ impl Parser {
                             }
                         };
                     };
-                    self.advance();
                     let block = self.parse_block()?;
                     return Ok(Tree::Fun {
                         name: Box::new(func_iden),
@@ -677,23 +706,50 @@ impl std::fmt::Display for Op {
     }
 }
 
+impl std::fmt::Display for Atom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Atom::Ident { range, source } => write!(f, "{}", &source[range.start..range.end]),
+            Atom::String { range, source } => write!(f, "{}", &source[range.start..range.end]),
+            Atom::Number(x) => write!(f, "{x}"),
+            Atom::Nil => write!(f, "Nil"),
+            Atom::Bool(x) => write!(f, "{x}"),
+            Atom::This => write!(f, "This"),
+            Atom::Super => write!(f, "Super"),
+            Atom::Error => write!(f, "Error"),
+        }
+    }
+}
+
 impl std::fmt::Display for Tree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Tree::Atom(x) => {
-                write!(f, "{:?}", x)
+                write!(f, "{}", x)
             }
             Tree::NonTerm(parent, children) => {
                 write!(f, "({}", parent)?;
+
                 for i in children {
                     write!(f, ", {}", i)?
                 }
                 write!(f, ")")
             }
-            _ => {
-                println!("hello");
-                unimplemented!()
+
+            Tree::Fun {
+                name,
+                parameters,
+                body,
+            } => {
+                write!(f, "{}", name)?;
+                write!(f, "(")?;
+                for i in parameters {
+                    write!(f, " {} ", i)?
+                }
+                write!(f, ")")?;
+                write!(f, " {{ {} }}", body)
             }
+            _ => unimplemented!(),
         }
     }
 }

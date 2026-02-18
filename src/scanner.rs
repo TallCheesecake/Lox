@@ -100,7 +100,7 @@ pub struct Scanner<'a> {
 }
 
 impl<'a> Iterator for Scanner<'a> {
-    type Item = miette::Result<Token, miette::Error>;
+    type Item = miette::Result<Token, miette::Report>;
     fn next(&mut self) -> Option<Self::Item> {
         pub enum ThirdState {
             OrEquals(char),
@@ -335,7 +335,7 @@ impl<'a> Scanner<'a> {
     }
 }
 
-pub fn collect(input: &str) -> Result<Vec<Token>, Error> {
+pub fn collect(input: &str) -> Result<Vec<Token>, miette::Report> {
     let mut iter = Scanner::new(input).into_iter();
     let mut tokens = Vec::new();
     while let Some(res) = iter.next() {

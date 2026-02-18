@@ -28,22 +28,21 @@ fn parse_args() -> Result<Args, lexopt::Error> {
     })
 }
 
-fn hello(args: Args) -> Result<(), miette::Error> {
+fn hello(args: Args) -> Result<(), miette::Report> {
     if args.file.is_some() {
         let contents = match fs::read_to_string(args.file.unwrap()) {
             Ok(r) => r,
             Err(_) => return Err(miette::miette!("io error")),
         };
         let mut parse = parser::Parser::new(contents)?;
-        let output = parse.parse_statment()?;
-        println!("{output}");
+        println!("{}", parse.parse_statment()?);
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }
     Ok(())
 }
 
-fn main() -> Result<(), miette::Error> {
+fn main() -> Result<(), miette::Report> {
     match parse_args() {
         Ok(x) => {
             return Ok(hello(x)?);
