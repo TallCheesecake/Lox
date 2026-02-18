@@ -287,27 +287,17 @@ impl Parser {
                 Tree::NonTerm(n.kind.into(), vec![rhs])
             }
             Token {
-                kind: TokenType::LeftParen,
+                kind: TokenType::LeftParen | TokenType::LeftBrace,
                 ..
             } => {
                 let lhs = self.parse_expr(0)?;
-                if self.expect(TokenType::RightParen) {
-                    return Err(ParserError {
-                        source: Arc::clone(&self.input),
-                        primary_span: token_to_span(&self.current()),
-                    })
-                    .wrap_err("I dont even know how you got here")
-                    .into();
-                }
+                if self.expect(TokenType::RightParen) | self.expect(TokenType::RightBrace) {
+                    return self.error("Expected either ) or } ");
+                };
                 Tree::NonTerm(Op::Group, vec![lhs])
             }
             _ => {
-                return Err(ParserError {
-                    source: Arc::clone(&self.input),
-                    primary_span: token_to_span(&self.current()),
-                })
-                .wrap_err("Expected expresion")
-                .into();
+                return self.error("Expected expresion");
             }
         };
         loop {
@@ -397,7 +387,14 @@ impl Parser {
         }
         Ok(lhs)
     }
-
+    fn error(&mut self, msg_input: &str) -> Result<Tree, miette::Report> {
+        let msg = format!("{}", msg_input);
+        return Err(ParserError {
+            source: Arc::clone(&self.input),
+            primary_span: token_to_span(&self.current()),
+        })
+        .wrap_err(msg);
+    }
     pub fn advance(&mut self) -> Token {
         let output = self.stream.get(self.pos).expect("Invariant broken: should not be possible for advance to return none since the prev match should break out on EOF.").clone();
         self.pos += 1;
@@ -490,28 +487,7 @@ impl Parser {
             false
         }
     }
-    pub fn parse_block(&mut self) -> Result<Tree, miette::Report> {
-        if self.expect(TokenType::LeftBrace) {
-            self.advance();
-            let middle = self.parse_expr(0)?;
-            if self.expect(TokenType::RightBrace) {
-                return Ok(Tree::NonTerm(Op::Group, vec![middle]));
-            } else {
-                return Err(ParserError {
-                    source: Arc::clone(&self.input),
-                    primary_span: token_to_span(&self.current()),
-                })
-                .wrap_err("Expected '}' ");
-            }
-        } else {
-            self.advance();
-            return Err(ParserError {
-                source: Arc::clone(&self.input),
-                primary_span: token_to_span(&self.current()),
-            })
-            .wrap_err("Expected '{' ");
-        };
-    }
+
     pub fn parse_statment(&mut self) -> Result<Tree, miette::Report> {
         let lhs = match self.advance() {
             Token {
@@ -523,11 +499,7 @@ impl Parser {
                 ..
             } => {
                 if !self.expect(TokenType::Identifier) {
-                    return Err(ParserError {
-                        source: Arc::clone(&self.input),
-                        primary_span: token_to_span(&self.current()),
-                    })
-                    .wrap_err("Expected a funciton name");
+                    return self.error("Expected function name");
                 } else {
                     let range = self.advance().range;
                     let func_iden = Tree::Atom(Atom::Ident {
@@ -536,16 +508,13 @@ impl Parser {
                     });
                     let mut temp = Vec::new();
                     if !self.expect(TokenType::LeftParen) {
-                        return Err(ParserError {
-                            source: Arc::clone(&self.input),
-                            primary_span: token_to_span(&self.current()),
-                        }
-                        .into());
+                        return self.error("Expected (");
                     } else {
                         self.advance();
                         if self.expect(TokenType::RightParen) {
                             self.advance();
                             {}
+                            //TODO: /?????
                         } else {
                             loop {
                                 if self.expect(TokenType::Comma) {
@@ -561,7 +530,7 @@ impl Parser {
                             }
                         };
                     };
-                    let block = self.parse_block()?;
+                    let block = self.parse_statment()?;
                     return Ok(Tree::Fun {
                         name: Box::new(func_iden),
                         parameters: temp,
@@ -583,25 +552,20 @@ impl Parser {
                     let iden = self.advance();
                     if self.expect(TokenType::Equal) {
                         self.advance();
-                        let val = self.parse_expr(0)?;
+                        let val;
+                        if self.expect_semicolon() {
+                            val = self.parse_expr(0)?;
+                        } else {
+                            return self.error("Expected ;");
+                        }
                         let key = String::from(&self.input[iden.range.start..=iden.range.end]);
                         map.insert(key.clone(), val);
                         Tree::Var(key, map)
                     } else {
-                        return Err(ParserError {
-                            source: Arc::clone(&self.input),
-                            primary_span: token_to_span(&self.current()),
-                        })
-                        .wrap_err("Please add a = sign after your var identintifier")
-                        .into();
+                        return self.error("Please add a = sign after your var identintifier");
                     }
                 } else {
-                    return Err(ParserError {
-                        source: Arc::clone(&self.input),
-                        primary_span: token_to_span(&self.current()),
-                    })
-                    .wrap_err("You must add a identifier after var")
-                    .into();
+                    return self.error("You must add a identifier after var");
                 }
             }
             Token {
@@ -628,47 +592,53 @@ impl Parser {
                     self.advance();
                     let var = self.parse_statment()?;
                     if !self.expect_semicolon() {
-                        return Err(ParserError {
-                            source: Arc::clone(&self.input),
-                            primary_span: token_to_span(&self.current()),
-                        })
-                        .wrap_err("Expected a ';' for a post var declaration");
+                        return self.error("Expected a ;");
                     }
                     self.advance();
                     let cond = self.parse_expr(0)?;
                     if !self.expect_semicolon() {
-                        return Err(ParserError {
-                            source: Arc::clone(&self.input),
-                            primary_span: token_to_span(&self.current()),
-                        })
-                        .wrap_err("Expected a ';' for a post cond declaration");
+                        return self.error("Expected a ;");
                     }
                     self.advance();
                     let inc = self.parse_expr(0)?;
                     if !self.expect(TokenType::RightParen) {
-                        return Err(ParserError {
-                            source: Arc::clone(&self.input),
-                            primary_span: token_to_span(&self.current()),
-                        })
-                        .wrap_err("Expected a ')'");
+                        return self.error("Expected a )");
                     }
                     self.advance();
                     println!("prev blcok {:?}", self.peek());
-                    let block = self.parse_block()?;
+                    let block = self.parse_statment()?;
                     //TODO: That cant be how this is done
                     return Ok(Tree::NonTerm(Op::For, vec![var, cond, inc, block]));
                 } else {
-                    return Err(ParserError {
-                        source: Arc::clone(&self.input),
-                        primary_span: token_to_span(&self.current()),
-                    })
-                    .wrap_err("Expected a '(' for a for loop");
+                    return self.error("Expected a (");
                 };
             }
             Token {
                 kind: TokenType::While,
                 ..
-            } => todo!("parse while"),
+            } => {
+                println!("L paren: {:?}", self.peek());
+                if !self.expect(TokenType::LeftParen) {
+                    return self.error("Expected a (");
+                } else {
+                    self.advance();
+                    let cond = self.parse_expr(0)?;
+                    println!("Right paren: {:?}", self.peek());
+                    if !self.expect(TokenType::RightParen) {
+                        return self.error("Expected a )");
+                    } else {
+                        self.advance();
+                        println!("L Brace: {:?}", self.peek());
+                        if !self.expect(TokenType::LeftBrace) {
+                            println!("insize error");
+                            return self.error("Expected a {");
+                        } else {
+                            let block = self.parse_statment()?;
+                            Tree::NonTerm(Op::While, vec![cond, block])
+                        }
+                    }
+                }
+            }
             Token {
                 kind: TokenType::If,
                 ..
@@ -676,8 +646,25 @@ impl Parser {
             Token {
                 kind: TokenType::LeftBrace,
                 ..
-            } => todo!("parse block"),
-            _ => todo!("cant parse"),
+            } => {
+                println!("L brace: {:?}", self.peek());
+                let middle = self.parse_statment()?;
+                if self.expect(TokenType::RightBrace) {
+                    self.advance();
+                    return Ok(Tree::NonTerm(Op::Group, vec![middle]));
+                } else {
+                    return self.error("Expected } ");
+                };
+            }
+
+            x => match x.kind {
+                TokenType::Identifier | TokenType::Number(_) | TokenType::String => {
+                    return self.error("maybe try putting var ? ");
+                }
+                _ => {
+                    return self.error("you must provide a declaration to start the block for now even if its just empty, a: var, fun, class, if ...");
+                }
+            },
         };
         Ok(lhs)
     }
