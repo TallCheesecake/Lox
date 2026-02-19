@@ -1,7 +1,7 @@
 use std::{ffi::OsString, fs};
-mod exe;
 mod parser;
 mod scanner;
+mod test;
 
 struct Args {
     file: Option<OsString>,
@@ -35,7 +35,7 @@ fn hello(args: Args) -> Result<(), miette::Report> {
             Err(_) => return Err(miette::miette!("io error")),
         };
         let mut parse = parser::Parser::new(contents)?;
-        println!("{}", parse.parse_statment()?);
+        println!("{:?}", parse.parse_statment()?);
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }

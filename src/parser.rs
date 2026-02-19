@@ -30,8 +30,8 @@ fn token_to_span(token: &Token) -> SourceSpan {
 }
 // struct Scope {
 //     parent: Box<Option<Scope>>,
-//     parent: Box<Option<Scope>>,
 // }
+
 #[derive(Debug)]
 pub enum Tree {
     Nil,
@@ -67,6 +67,7 @@ pub enum Atom {
     This,
     Error,
 }
+
 impl From<Op> for TokenType {
     fn from(value: Op) -> Self {
         match value {
@@ -233,7 +234,9 @@ impl Parser {
     //     };
     // }
     // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
+
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree, miette::Report> {
+        println!("here");
         let mut lhs = match self.advance() {
             Token {
                 kind: TokenType::String,
@@ -266,7 +269,7 @@ impl Parser {
                 source: Arc::clone(&self.input),
             }),
             n @ Token {
-                kind: TokenType::Minus | TokenType::Bang,
+                kind: TokenType::Minus | TokenType::Print | TokenType::Bang,
                 ..
             } => {
                 let ((), bp) = prefix_binding_power(&n.kind);
@@ -287,7 +290,9 @@ impl Parser {
                 return self.error("Expected expresion");
             }
         };
+
         loop {
+            println!("current {:?}", self.current());
             let op = match self.peek() {
                 Token {
                     kind:
@@ -299,6 +304,7 @@ impl Parser {
                         | TokenType::Semicolon,
                     ..
                 } => {
+                    println!("should break");
                     break;
                 }
 
@@ -432,35 +438,21 @@ impl Parser {
     // }
     //
     //TODO: Make print and retrun part of the pratt system as unary prefixes
-    pub fn parse_print(&mut self) -> Result<Tree, miette::Report> {
-        let value = self.peek();
-        // println!("{:?}", value);
-        if value.kind != TokenType::String {
-            return Err(ParserError {
-                source: Arc::clone(&self.input),
-                primary_span: token_to_span(&self.current()),
-            })
-            .wrap_err("dont even know how you got here")
-            .into();
-        } else if !self.expect_semicolon() {
-            let val = self.advance();
-            let range = val.range;
-            return Ok(Tree::Atom(Atom::Ident {
-                range,
-                source: Arc::clone(&self.input),
-            }));
-        } else {
-            panic!("need to make error")
-            // let source = String::from(v);
-            // return Err(miette!(
-            //     severity = Severity::Error,
-            //     help = "This is a syntax error",
-            //     labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
-            //     "Missing Semicolon ';'"
-            // )
-            // .with_source_code(source));
-        };
-    }
+    // pub fn parse_print(&mut self) -> Result<Tree, miette::Report> {
+    //     let value = self.peek();
+    //     if value.kind != TokenType::String {
+    //         return self.error("Expected value to print");
+    //     } else if !self.expect_semicolon() {
+    //         let val = self.advance();
+    //         let range = val.range;
+    //         return Ok(Tree::Atom(Atom::Ident {
+    //             range,
+    //             source: Arc::clone(&self.input),
+    //         }));
+    //     } else {
+    //         panic!("need to make error")
+    //     };
+    // }
 
     fn expect(&mut self, input: TokenType) -> bool {
         if self.peek().kind == input {
@@ -483,7 +475,15 @@ impl Parser {
             Token {
                 kind: TokenType::Print,
                 ..
-            } => self.parse_print()?,
+            } => {
+                let ((), bp) = prefix_binding_power(&TokenType::Print);
+                let rhs = self.parse_expr(bp)?;
+                if !self.expect_semicolon() {
+                    return self.error("Expected ;");
+                }
+                Tree::NonTerm(Op::Print, vec![rhs])
+            }
+
             Token {
                 kind: TokenType::Fun,
                 ..
@@ -678,7 +678,7 @@ impl Parser {
 
 fn prefix_binding_power(op: &scanner::TokenType) -> ((), u8) {
     match op {
-        TokenType::Plus | TokenType::Minus => ((), 5),
+        TokenType::Plus | TokenType::Minus | TokenType::Print => ((), 5),
         _ => {
             panic!("woops bad token this should be a error")
         }
@@ -772,7 +772,6 @@ impl std::fmt::Display for Tree {
                 }
                 write!(f, ")")
             }
-
             Tree::Fun {
                 name,
                 parameters,
@@ -793,15 +792,5 @@ impl std::fmt::Display for Tree {
             }
             _ => unimplemented!(),
         }
-    }
-}
-
-//TODO: Write tests im tired of doing this by hand
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn it_works() {
-        unreachable!()
     }
 }

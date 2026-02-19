@@ -8,3 +8,6 @@ exclude = ["src/parser.rs"]
 miette = { version = "7.6.0", features = ["fancy"] }
 lexopt = "0.3.1"
 
+[dev-dependencies]
+insta = { version = "1.46.3", features = ["yaml"] }
+

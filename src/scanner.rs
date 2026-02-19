@@ -342,5 +342,13 @@ pub fn collect(input: &str) -> Result<Vec<Token>, miette::Report> {
         let token = res?;
         tokens.push(token);
     }
+    tokens.push(Token {
+        kind: TokenType::Eof,
+        range: Range {
+            start: input.len() - '\0'.len_utf8(),
+            end: input.len(),
+        },
+    });
+
     Ok(tokens)
 }
