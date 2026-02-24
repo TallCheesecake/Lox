@@ -36,6 +36,8 @@ fn hello(args: Args) -> Result<(), miette::Report> {
         };
         let mut parse = parser::Parser::new(contents)?;
         println!("{:?}", parse.parse_statment()?);
+        // let mut parse = parser::Parser::new(contents)?;
+        // println!("{:?}", parse.parse_expr(0)?);
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }
