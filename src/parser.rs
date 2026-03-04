@@ -6,6 +6,7 @@ use lexopt::Arg::Value;
 use miette::{Context, Diagnostic, Result, SourceSpan};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::write;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -35,6 +36,7 @@ fn token_to_span(token: &Token) -> SourceSpan {
 #[derive(Debug)]
 pub enum Tree {
     Nil,
+    ExprStatment(Box<Tree>),
     Var(String, Box<Tree>),
     Call {
         callee: Box<Tree>,
@@ -171,78 +173,24 @@ impl Parser {
             pos: 0,
         })
     }
-    // pub fn parse_program(&mut self) -> Result<Tree<'a>, Error> {
-    //     let val = self.parse_decl()?;
-    //     if !self.expect(TokenType::Eof)? {
-    //         todo!()
-    //     } else {
-    //         Ok(val)
-    //     }
-    // }
-    //
-    // pub fn parse_decl(&mut self) -> Result<Tree<'a>, Error> {
-    //     match self.advance() {
-    //         Token {
-    //             kind: TokenType::Fun,
-    //             ..
-    //         } => {
-    //             let val = self.parse_func_decl()?;
-    //
-    //             if !self.expect(TokenType::Eof)? {
-    //                 todo!()
-    //             } else {
-    //                 Ok(val)
-    //             }
-    //         }
-    //         Token {
-    //             kind: TokenType::Var,
-    //             ..
-    //         } => {
-    //             let val = self.parse_func_decl()?;
-    //
-    //             if !self.expect(TokenType::Eof)? {
-    //                 todo!()
-    //             } else {
-    //                 Ok(val)
-    //             }
-    //         }
-    //         _ => todo!(),
-    //     }
-    // }
-    //
-    // // pub fn parse_expr_stmt(&mut self) -> Result<Tree<'a>, Error> {}
-    //
-    // pub fn parse_call(&mut self) -> Result<Tree<'a>, Error> {
-    //     let value = self.peek();
-    //     if self.expect(TokenType::Identifier) {
-    //         return Ok(Tree::Call {
-    //             callee: Box::new(self.parse_expr(0)?),
-    //             arguments: vec![self.parse_expr(0)?],
-    //         });
-    //     };
-    //
-    //     if value.kind != TokenType::Identifier {
-    //         return Err(miette::miette!(
-    //             help = "This is a syntax error",
-    //             labels = vec![LabeledSpan::at_offset(0, "here")],
-    //             "Unexpected Token"
-    //         ));
-    //     } else if self.expect(TokenType::LeftParen)? {
-    //         self.advance();
-    //         let lhs = self.parse_expr(0)?;
-    //         return Ok(Tree::NonTerm(Op::Call));
-    //     } else {
-    //         let source = String::from(value.lexeme);
-    //         return Err(miette!(
-    //             severity = Severity::Error,
-    //             help = "This is a syntax error",
-    //             labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
-    //             "Missing Semicolon ';'"
-    //         )
-    //         .with_source_code(source));
-    //     };
-    // }
-    // // pub fn parse_prim(&mut self) -> Result<Tree<'a>, Error> {}
+
+    pub fn parse_program(&mut self) -> Result<Vec<Tree>, miette::Report> {
+        let mut parent = Vec::new();
+        while self.pos <= self.stream.len() {
+            let val = self.parse_statment()?;
+            match val {
+                Tree::Atom(x) => match x {
+                    Atom::Nil => {
+                        break;
+                    }
+                    _ => continue,
+                },
+                x => parent.push(x),
+            }
+            println!("ADVANCED VALUE: {:?}", self.advance());
+        }
+        Ok(parent)
+    }
 
     pub fn parse_expr(&mut self, min_bp: u8) -> Result<Tree, miette::Report> {
         let mut lhs = match self.advance() {
@@ -294,7 +242,9 @@ impl Parser {
                 };
                 Tree::NonTerm(Op::Group, vec![lhs])
             }
+
             _ => {
+                println!("current {:?}", self.current());
                 return self.error("Expected expresion");
             }
         };
@@ -312,7 +262,6 @@ impl Parser {
                 } => {
                     break;
                 }
-
                 n @ Token {
                     kind:
                         TokenType::Plus
@@ -334,27 +283,13 @@ impl Parser {
                     break;
                 }
             };
-
             if let Some((l_bp, ())) = postfix_binding_power(op.kind) {
                 if l_bp < min_bp {
                     break;
                 }
                 self.advance();
                 lhs = if op.kind == TokenType::LeftHardBrace {
-                    // let temp = op.lexeme.to_string();
                     let rhs = self.parse_expr(0)?;
-                    // if self.peek().kind != TokenType::RightHardBrace {
-                    //     panic!();
-                    //     let source = String::from(format!("{temp} ... EXPECTING CLOSING: ]"));
-                    //     return Err(miette!(
-                    //         severity = Severity::Error,
-                    //         help = "hello is a syntax error",
-                    //         labels = vec![LabeledSpan::at_offset(0, "here")],
-                    //         "Missing Closing ]"
-                    //     )
-                    //     .with_source_code(source));
-                    // }
-
                     Tree::NonTerm(op.kind.into(), vec![lhs, rhs])
                 } else {
                     Tree::NonTerm(op.kind.into(), vec![lhs])
@@ -372,19 +307,6 @@ impl Parser {
                 lhs = Tree::NonTerm(op.kind.into(), vec![lhs, rhs]);
                 continue;
             }
-
-            // if let Some((l_bp, r_bp)) = keywords(&op.kind) {
-            //     println!("l_bp: {:?}", l_bp);
-            //     if l_bp < min_bp {
-            //         break;
-            //     }
-            //     self.advance();
-            //     let rhs = self.parse_expr(r_bp)?;
-            //     println!("rhs: {:?}", rhs);
-            //     lhs = Tree::NonTerm(op.kind, vec![lhs, rhs]);
-            //
-            //     continue;
-            // }
             break;
         }
         Ok(lhs)
@@ -415,51 +337,6 @@ impl Parser {
         self.stream.get(self.pos).expect("Invariant broken: if peek reached None that means that the prev token must have been EOF and was not caught.").clone()
     }
 
-    // fn parse_funciton_decl(&mut self, func: &mut Functions) -> Result<Tree<'a>, Error> {
-    //     let value = self.peek();
-    //     //NOTE: I think that this makes it so that you mush declare before use
-    //     if self.expect(TokenType::LeftParen) {
-    //         Tree::Atom(Atom::Ident(value.lexeme))
-    //     }
-    //     if value.kind != TokenType::Identifier {
-    //         return Err(miette::miette!(
-    //             help = "This is a syntax error",
-    //             labels = vec![LabeledSpan::at_offset(0, "here")],
-    //             "Unexpected Token"
-    //         ));
-    //     } else if self.expect(TokenType::LeftParen)? {
-    //         self.advance();
-    //         let lhs = self.parse_expr(0)?;
-    //         return Ok(Tree::NonTerm(Op::Call));
-    //     } else {
-    //         let source = String::from(value.lexeme);
-    //         return Err(miette!(
-    //             severity = Severity::Error,
-    //             help = "This is a syntax error",
-    //             labels = vec![LabeledSpan::at_offset(value.lexeme.len() - 1, "here")],
-    //             "Missing Semicolon ';'"
-    //         )
-    //         .with_source_code(source));
-    //     };
-    // }
-    //
-    //TODO: Make print and retrun part of the pratt system as unary prefixes
-    // pub fn parse_print(&mut self) -> Result<Tree, miette::Report> {
-    //     let value = self.peek();
-    //     if value.kind != TokenType::String {
-    //         return self.error("Expected value to print");
-    //     } else if !self.expect_semicolon() {
-    //         let val = self.advance();
-    //         let range = val.range;
-    //         return Ok(Tree::Atom(Atom::Ident {
-    //             range,
-    //             source: Arc::clone(&self.input),
-    //         }));
-    //     } else {
-    //         panic!("need to make error")
-    //     };
-    // }
-
     fn expect(&mut self, input: TokenType) -> bool {
         if self.peek().kind == input {
             true
@@ -477,11 +354,12 @@ impl Parser {
     }
 
     pub fn parse_statment(&mut self) -> Result<Tree, miette::Report> {
-        let lhs = match self.advance() {
+        let lhs = match self.peek() {
             Token {
                 kind: TokenType::Print,
                 ..
             } => {
+                self.advance();
                 let ((), bp) = prefix_binding_power(TokenType::Print);
                 let rhs = self.parse_expr(bp)?;
                 if !self.expect_semicolon() {
@@ -494,38 +372,44 @@ impl Parser {
                 kind: TokenType::Fun,
                 ..
             } => {
+                self.advance();
                 if !self.expect(TokenType::Identifier) {
                     return self.error("Expected function name");
                 };
+
                 let range = self.advance().range;
                 let func_iden = Tree::Atom(Atom::Ident {
                     range,
                     source: Arc::clone(&self.input),
                 });
+
                 let mut temp = Vec::new();
                 if !self.expect(TokenType::LeftParen) {
                     return self.error("Expected (");
                 };
                 self.advance();
-                if !self.expect(TokenType::RightParen) {
-                    self.advance();
-                    {}
-                    //TODO: /?????
-                };
-
                 loop {
+                    if self.expect(TokenType::RightParen) {
+                        break;
+                    }
                     if self.expect(TokenType::Comma) {
                         self.advance();
-                    } else if !self.expect(TokenType::Comma)
-                        && self.current().kind != TokenType::RightParen
-                    {
-                        temp.push(self.parse_expr(0)?);
-                    } else {
-                        break;
-                    };
-                    self.advance();
+                    }
+                    let range = self.current().range;
+                    let attempt: Tree = self.parse_expr(0).unwrap_or_else(|_| {
+                        self.advance();
+                        Tree::Atom(Atom::Ident {
+                            range,
+                            source: Arc::clone(&self.input),
+                        })
+                    });
+                    println!("out: {}", attempt);
+                    temp.push(attempt);
                 }
-
+                if !self.expect(TokenType::RightParen) {
+                    return self.error("Expected )");
+                };
+                self.advance();
                 let block = self.parse_statment()?;
                 return Ok(Tree::Fun {
                     name: Box::new(func_iden),
@@ -542,6 +426,7 @@ impl Parser {
                 kind: TokenType::Var,
                 ..
             } => {
+                self.advance();
                 if !self.expect(TokenType::Identifier) {
                     return self.error("You must add a identifier after var");
                 };
@@ -562,6 +447,7 @@ impl Parser {
                 kind: TokenType::Else,
                 ..
             } => {
+                self.advance();
                 let block = self.parse_statment()?;
                 return Ok(Tree::NonTerm(Op::Else, vec![block]));
             }
@@ -570,6 +456,7 @@ impl Parser {
                 kind: TokenType::Class,
                 ..
             } => {
+                self.advance();
                 if !self.expect(TokenType::Identifier) {
                     return self.error("Expected ;");
                 };
@@ -595,6 +482,7 @@ impl Parser {
                 kind: TokenType::For,
                 ..
             } => {
+                self.advance();
                 if self.expect(TokenType::LeftParen) {
                     self.advance();
                     let var = self.parse_statment()?;
@@ -622,6 +510,7 @@ impl Parser {
                 kind: TokenType::While,
                 ..
             } => {
+                self.advance();
                 if !self.expect(TokenType::LeftParen) {
                     return self.error("Expected a (");
                 };
@@ -641,6 +530,7 @@ impl Parser {
                 kind: TokenType::If,
                 ..
             } => {
+                self.advance();
                 if !self.expect(TokenType::LeftParen) {
                     return self.error("Expected a (");
                 };
@@ -660,22 +550,24 @@ impl Parser {
                 kind: TokenType::LeftBrace,
                 ..
             } => {
-                let middle = self.parse_statment()?;
                 self.advance();
+                let middle = self.parse_statment()?;
                 if !self.expect(TokenType::RightBrace) {
                     return self.error("Expected } ");
                 };
                 return Ok(Tree::NonTerm(Op::Group, vec![middle]));
             }
-
-            x => match x.kind {
-                TokenType::Identifier | TokenType::Number(_) | TokenType::String => {
-                    return self.error("maybe try putting var ? ");
+            _ => {
+                if self.expect(TokenType::Eof) {
+                    println!("Nil");
+                    return Ok(Tree::Atom(Atom::Nil));
                 }
-                _ => {
-                    return self.error("you must (for now) provide a declaration to start the block for now even if its just empty, a: var, fun, class, if ...");
+                let val = self.parse_expr(0)?;
+                if self.expect(TokenType::Semicolon) {
+                    return Ok(val);
                 }
-            },
+                return Ok(Tree::ExprStatment(Box::new(val)));
+            }
         };
         Ok(lhs)
     }
@@ -770,6 +662,15 @@ impl std::fmt::Display for Atom {
 impl std::fmt::Display for Tree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Tree::ExprStatment(op) => {
+                write!(f, "({})", op)
+            }
+            Tree::Op(op) => {
+                write!(f, "{}", op)
+            }
+            Tree::Nil => {
+                write!(f, "EOF")
+            }
             Tree::Atom(x) => {
                 write!(f, "{}", x)
             }

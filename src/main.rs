@@ -35,9 +35,9 @@ fn hello(args: Args) -> Result<(), miette::Report> {
             Err(_) => return Err(miette::miette!("io error")),
         };
         let mut parse = parser::Parser::new(contents)?;
-        println!("{:?}", parse.parse_statment()?);
-        // let mut parse = parser::Parser::new(contents)?;
-        // println!("{:?}", parse.parse_expr(0)?);
+        for i in parse.parse_program()? {
+            println!("LEVEL TOP: {}", i);
+        }
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }

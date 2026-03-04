@@ -1,0 +1,9 @@
+---
+source: src/test.rs
+expression: words
+---
+- hello
+- from
+- the
+- other
+- side

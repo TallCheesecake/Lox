@@ -1,0 +1,39 @@
+---
+source: src/test.rs
+expression: output
+---
+NonTerm(
+    While,
+    [
+        NonTerm(
+            Equal,
+            [
+                Atom(
+                    Ident {
+                        range: 6..7,
+                        source: "while(a = 1) {var hello = \"hi\";}",
+                    },
+                ),
+                Atom(
+                    Number(
+                        1.0,
+                    ),
+                ),
+            ],
+        ),
+        NonTerm(
+            Group,
+            [
+                Var(
+                    "hello",
+                    Atom(
+                        String {
+                            range: 26..30,
+                            source: "while(a = 1) {var hello = \"hi\";}",
+                        },
+                    ),
+                ),
+            ],
+        ),
+    ],
+)

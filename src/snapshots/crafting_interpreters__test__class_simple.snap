@@ -1,0 +1,28 @@
+---
+source: src/test.rs
+expression: output
+---
+NonTerm(
+    Class,
+    [
+        Atom(
+            Ident {
+                range: 6..11,
+                source: "class Hello {var i =1;} ",
+            },
+        ),
+        NonTerm(
+            Group,
+            [
+                Var(
+                    "i",
+                    Atom(
+                        Number(
+                            1.0,
+                        ),
+                    ),
+                ),
+            ],
+        ),
+    ],
+)
