@@ -355,19 +355,6 @@ impl Parser {
     pub fn parse_statment(&mut self) -> Result<Tree, miette::Report> {
         let lhs = match self.peek() {
             Token {
-                kind: TokenType::Print,
-                ..
-            } => {
-                self.advance();
-                let ((), bp) = prefix_binding_power(TokenType::Print);
-                let rhs = self.parse_expr(bp)?;
-                if !self.expect_semicolon() {
-                    return self.error("Expected ;");
-                }
-                Tree::NonTerm(Op::Print, vec![rhs])
-            }
-
-            Token {
                 kind: TokenType::Fun,
                 ..
             } => {
@@ -485,11 +472,8 @@ impl Parser {
                 if self.expect(TokenType::LeftParen) {
                     self.advance();
                     let var = self.parse_statment()?;
-                    println!("var {}", var);
                     let cond = self.parse_statment()?;
-                    println!("cond {}", cond);
                     let inc = self.parse_statment()?;
-                    println!("inc {}", inc);
                     if !self.expect(TokenType::RightParen) {
                         return self.error("Expected a )");
                     };
@@ -509,7 +493,7 @@ impl Parser {
                     return self.error("Expected a (");
                 };
                 self.advance();
-                let cond = self.parse_expr(0)?;
+                let cond = self.parse_statment()?;
                 if !self.expect(TokenType::RightParen) {
                     return self.error("Expected a )");
                 };
@@ -552,7 +536,6 @@ impl Parser {
                     match val {
                         Tree::Atom(x) => match x {
                             Atom::Nil => {
-                                println!("current: {:?}", self.current());
                                 break;
                             }
                             _ => continue,
@@ -560,8 +543,6 @@ impl Parser {
                         x => parent.push(x),
                     }
                 }
-                println!("c: {:?}", self.current());
-                println!("p: {:?}", self.peek());
                 if !self.expect(TokenType::RightBrace) {
                     return self.error("Expected } ");
                 };

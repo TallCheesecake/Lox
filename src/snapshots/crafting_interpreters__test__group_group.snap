@@ -1,0 +1,44 @@
+---
+source: src/test.rs
+expression: output
+---
+[
+    NonTerm(
+        Group,
+        [
+            Var(
+                "i",
+                Atom(
+                    Number(
+                        1.0,
+                    ),
+                ),
+            ),
+        ],
+    ),
+    NonTerm(
+        Group,
+        [
+            NonTerm(
+                Group,
+                [
+                    NonTerm(
+                        Plus,
+                        [
+                            Atom(
+                                Number(
+                                    1.0,
+                                ),
+                            ),
+                            Atom(
+                                Number(
+                                    1.0,
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    ),
+]

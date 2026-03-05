@@ -2,11 +2,13 @@
 source: src/test.rs
 expression: output
 ---
-Var(
-    "a",
-    Atom(
-        Number(
-            1.0,
+[
+    Var(
+        "a",
+        Atom(
+            Number(
+                1.0,
+            ),
         ),
     ),
-)
+]

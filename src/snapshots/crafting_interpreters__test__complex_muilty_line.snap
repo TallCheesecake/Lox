@@ -2,11 +2,104 @@
 source: src/test.rs
 expression: output
 ---
-Var(
-    "a",
-    Atom(
-        Number(
-            3.0,
+[
+    Var(
+        "a",
+        Atom(
+            Number(
+                3.0,
+            ),
         ),
     ),
-)
+    NonTerm(
+        For,
+        [
+            ExprStatment(
+                Atom(
+                    Ident {
+                        range: 17..18,
+                        source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                    },
+                ),
+            ),
+            ExprStatment(
+                NonTerm(
+                    LessEqual,
+                    [
+                        Atom(
+                            Ident {
+                                range: 20..21,
+                                source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                            },
+                        ),
+                        Atom(
+                            Number(
+                                1.0,
+                            ),
+                        ),
+                    ],
+                ),
+            ),
+            NonTerm(
+                Equal,
+                [
+                    Atom(
+                        Ident {
+                            range: 28..29,
+                            source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                        },
+                    ),
+                    NonTerm(
+                        Plus,
+                        [
+                            Atom(
+                                Ident {
+                                    range: 32..33,
+                                    source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                                },
+                            ),
+                            Atom(
+                                Number(
+                                    1.0,
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+            NonTerm(
+                Group,
+                [
+                    NonTerm(
+                        Plus,
+                        [
+                            Atom(
+                                Number(
+                                    1.0,
+                                ),
+                            ),
+                            Atom(
+                                Number(
+                                    1.0,
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    ),
+    ExprStatment(
+        NonTerm(
+            Print,
+            [
+                Atom(
+                    String {
+                        range: 54..67,
+                        source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                    },
+                ),
+            ],
+        ),
+    ),
+]

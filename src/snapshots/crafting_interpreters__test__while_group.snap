@@ -1,0 +1,53 @@
+---
+source: src/test.rs
+expression: output
+---
+[
+    NonTerm(
+        While,
+        [
+            NonTerm(
+                Less,
+                [
+                    Atom(
+                        Ident {
+                            range: 6..7,
+                            source: "while(d < 2) { 1+ 2; {} }",
+                        },
+                    ),
+                    Atom(
+                        Number(
+                            2.0,
+                        ),
+                    ),
+                ],
+            ),
+            NonTerm(
+                Group,
+                [
+                    ExprStatment(
+                        NonTerm(
+                            Plus,
+                            [
+                                Atom(
+                                    Number(
+                                        1.0,
+                                    ),
+                                ),
+                                Atom(
+                                    Number(
+                                        2.0,
+                                    ),
+                                ),
+                            ],
+                        ),
+                    ),
+                    NonTerm(
+                        Group,
+                        [],
+                    ),
+                ],
+            ),
+        ],
+    ),
+]

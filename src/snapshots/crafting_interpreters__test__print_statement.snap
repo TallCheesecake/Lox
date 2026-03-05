@@ -2,14 +2,18 @@
 source: src/test.rs
 expression: output
 ---
-NonTerm(
-    Print,
-    [
-        Atom(
-            String {
-                range: 6..13,
-                source: "print \"hello\";",
-            },
+[
+    ExprStatment(
+        NonTerm(
+            Print,
+            [
+                Atom(
+                    String {
+                        range: 6..13,
+                        source: "print \"hello\";",
+                    },
+                ),
+            ],
         ),
-    ],
-)
+    ),
+]

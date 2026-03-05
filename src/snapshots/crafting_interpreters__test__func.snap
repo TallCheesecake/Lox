@@ -2,48 +2,50 @@
 source: src/test.rs
 expression: output
 ---
-Fun {
-    name: Atom(
-        Ident {
-            range: 5..7,
-            source: " fun hi(a + 1, b) { var a = 1; } ",
-        },
-    ),
-    parameters: [
-        NonTerm(
-            Plus,
+[
+    Fun {
+        name: Atom(
+            Ident {
+                range: 5..7,
+                source: " fun hi(a + 1, b) { var a = 1; } ",
+            },
+        ),
+        parameters: [
+            NonTerm(
+                Plus,
+                [
+                    Atom(
+                        Ident {
+                            range: 8..9,
+                            source: " fun hi(a + 1, b) { var a = 1; } ",
+                        },
+                    ),
+                    Atom(
+                        Number(
+                            1.0,
+                        ),
+                    ),
+                ],
+            ),
+            Atom(
+                Ident {
+                    range: 15..16,
+                    source: " fun hi(a + 1, b) { var a = 1; } ",
+                },
+            ),
+        ],
+        body: NonTerm(
+            Group,
             [
-                Atom(
-                    Ident {
-                        range: 8..9,
-                        source: " fun hi(a + 1, b) { var a = 1; } ",
-                    },
-                ),
-                Atom(
-                    Number(
-                        1.0,
+                Var(
+                    "a",
+                    Atom(
+                        Number(
+                            1.0,
+                        ),
                     ),
                 ),
             ],
         ),
-        Atom(
-            Ident {
-                range: 15..16,
-                source: " fun hi(a + 1, b) { var a = 1; } ",
-            },
-        ),
-    ],
-    body: NonTerm(
-        Group,
-        [
-            Var(
-                "a",
-                Atom(
-                    Number(
-                        1.0,
-                    ),
-                ),
-            ),
-        ],
-    ),
-}
+    },
+]
