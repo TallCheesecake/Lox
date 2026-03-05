@@ -1,6 +1,16 @@
 use super::*;
 
 #[test]
+fn complex_muilty_line() -> Result<(), Box<dyn std::error::Error>> {
+    let mut parse = parser::Parser::new(String::from(
+        " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+    ))?;
+    let output = parse.parse_statment()?;
+    insta::assert_debug_snapshot!(output);
+    Ok(())
+}
+
+#[test]
 fn test_func() -> Result<(), Box<dyn std::error::Error>> {
     let mut parse = parser::Parser::new(String::from(" fun hi(a + 1, b) { var a = 1; } "))?;
     let output = parse.parse_statment()?;

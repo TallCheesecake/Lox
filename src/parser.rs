@@ -187,7 +187,6 @@ impl Parser {
                 },
                 x => parent.push(x),
             }
-            println!("ADVANCED VALUE: {:?}", self.advance());
         }
         Ok(parent)
     }
@@ -244,7 +243,6 @@ impl Parser {
             }
 
             _ => {
-                println!("current {:?}", self.current());
                 return self.error("Expected expresion");
             }
         };
@@ -275,6 +273,7 @@ impl Parser {
                         | TokenType::Equal
                         | TokenType::Greater
                         | TokenType::LessEqual
+                        | TokenType::Less
                         | TokenType::Slash
                         | TokenType::Star,
                     ..
@@ -403,7 +402,6 @@ impl Parser {
                             source: Arc::clone(&self.input),
                         })
                     });
-                    println!("out: {}", attempt);
                     temp.push(attempt);
                 }
                 if !self.expect(TokenType::RightParen) {
@@ -440,6 +438,7 @@ impl Parser {
                     return self.error("Expected ;");
                 };
                 let name = String::from(&self.input[iden.range.start..iden.range.end]);
+                self.advance();
                 Tree::Var(name, Box::new(val))
             }
 
@@ -486,16 +485,11 @@ impl Parser {
                 if self.expect(TokenType::LeftParen) {
                     self.advance();
                     let var = self.parse_statment()?;
-                    if !self.expect_semicolon() {
-                        return self.error("Expected a ;");
-                    };
-                    self.advance();
-                    let cond = self.parse_expr(0)?;
-                    if !self.expect_semicolon() {
-                        return self.error("Expected a ;");
-                    };
-                    self.advance();
-                    let inc = self.parse_expr(0)?;
+                    println!("var {}", var);
+                    let cond = self.parse_statment()?;
+                    println!("cond {}", cond);
+                    let inc = self.parse_statment()?;
+                    println!("inc {}", inc);
                     if !self.expect(TokenType::RightParen) {
                         return self.error("Expected a )");
                     };
@@ -550,23 +544,40 @@ impl Parser {
                 kind: TokenType::LeftBrace,
                 ..
             } => {
+                let mut parent = Vec::new();
                 self.advance();
-                let middle = self.parse_statment()?;
+                while !self.expect(TokenType::RightBrace) {
+                    let val = self.parse_statment()?;
+                    println!("val: {:?}", val);
+                    match val {
+                        Tree::Atom(x) => match x {
+                            Atom::Nil => {
+                                println!("current: {:?}", self.current());
+                                break;
+                            }
+                            _ => continue,
+                        },
+                        x => parent.push(x),
+                    }
+                }
+                println!("c: {:?}", self.current());
+                println!("p: {:?}", self.peek());
                 if !self.expect(TokenType::RightBrace) {
                     return self.error("Expected } ");
                 };
-                return Ok(Tree::NonTerm(Op::Group, vec![middle]));
+                self.advance();
+                return Ok(Tree::NonTerm(Op::Group, parent));
             }
             _ => {
                 if self.expect(TokenType::Eof) {
-                    println!("Nil");
                     return Ok(Tree::Atom(Atom::Nil));
                 }
                 let val = self.parse_expr(0)?;
                 if self.expect(TokenType::Semicolon) {
-                    return Ok(val);
+                    self.advance();
+                    return Ok(Tree::ExprStatment(Box::new(val)));
                 }
-                return Ok(Tree::ExprStatment(Box::new(val)));
+                return Ok(val);
             }
         };
         Ok(lhs)
