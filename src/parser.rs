@@ -33,6 +33,11 @@ fn token_to_span(token: &Token) -> SourceSpan {
     )
 }
 
+pub struct Node {
+    NodeID: u32,
+    Node: Tree,
+}
+
 #[derive(Debug)]
 pub enum Tree {
     Nil,
@@ -163,6 +168,18 @@ pub struct Parser {
     pub input: Arc<String>,
     pub pos: usize,
 }
+
+impl Iterator for Tree {
+    type Item = Tree;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Tree::NonTerm(op, trees) => return self.next(),
+            Tree::Op(_) => None,
+            _ => None,
+        }?
+    }
+}
+
 impl Parser {
     pub fn new(input: String) -> Result<Parser, miette::Report> {
         let stream = scanner::collect(&input)?;

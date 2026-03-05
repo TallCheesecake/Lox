@@ -1,7 +1,9 @@
 use std::{ffi::OsString, fs};
+mod analysis;
 mod parser;
 mod scanner;
 mod test;
+mod vm;
 
 struct Args {
     file: Option<OsString>,
