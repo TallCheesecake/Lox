@@ -4,7 +4,6 @@ mod parser;
 mod scanner;
 mod test;
 mod vm;
-
 struct Args {
     file: Option<OsString>,
 }
@@ -37,8 +36,8 @@ fn hello(args: Args) -> Result<(), miette::Report> {
             Err(_) => return Err(miette::miette!("io error")),
         };
         let mut parse = parser::Parser::new(contents)?;
-        for i in parse.parse_program()? {
-            println!("LEVEL TOP: {}", i);
+        for mut i in parse.parse_program()? {
+            println!("{}", i);
         }
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");

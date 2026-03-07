@@ -1,12 +1,8 @@
 //TODO: Parse expresion statments properly
-use crate::scanner::TokenType;
-use crate::scanner::{self, Token};
+use crate::scanner::{self, Token, TokenType};
 use core::panic;
 use lexopt::Arg::Value;
 use miette::{Context, Diagnostic, Result, SourceSpan};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::fmt::write;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -33,16 +29,11 @@ fn token_to_span(token: &Token) -> SourceSpan {
     )
 }
 
-pub struct Node {
-    NodeID: u32,
-    Node: Tree,
-}
-
 #[derive(Debug)]
 pub enum Tree {
     Nil,
-    ExprStatment(Box<Tree>),
-    Var(String, Box<Tree>),
+    ExprStatment(Vec<Tree>),
+    Var(String, Vec<Tree>),
     Call {
         callee: Box<Tree>,
         arguments: Vec<Tree>,
@@ -169,17 +160,23 @@ pub struct Parser {
     pub pos: usize,
 }
 
-impl Iterator for Tree {
-    type Item = Tree;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Tree::NonTerm(op, trees) => return self.next(),
-            Tree::Op(_) => None,
-            _ => None,
-        }?
-    }
-}
-
+// impl Iterator for Tree {
+//     type Item = Tree;
+//     fn next(&mut self) -> Option<Self::Item> {
+//         match self {
+//             Tree::Nil => return None,
+//             Tree::ExprStatment(tree) => return tree.next(),
+//             Tree::Atom(_) => return None,
+//             Tree::NonTerm(_, tree) => {
+//                 for i in tree {
+//                     return i.next();
+//                 }
+//                 return None;
+//             }
+//             _ => unimplemented!(),
+//         };
+//     }
+// }
 impl Parser {
     pub fn new(input: String) -> Result<Parser, miette::Report> {
         let stream = scanner::collect(&input)?;
@@ -443,7 +440,9 @@ impl Parser {
                 };
                 let name = String::from(&self.input[iden.range.start..iden.range.end]);
                 self.advance();
-                Tree::Var(name, Box::new(val))
+                let mut temp = Vec::new();
+                temp.push(val);
+                Tree::Var(name, temp)
             }
 
             Token {
@@ -545,11 +544,10 @@ impl Parser {
                 kind: TokenType::LeftBrace,
                 ..
             } => {
-                let mut parent = Vec::new();
+                let mut child = Vec::new();
                 self.advance();
                 while !self.expect(TokenType::RightBrace) {
                     let val = self.parse_statment()?;
-                    println!("val: {:?}", val);
                     match val {
                         Tree::Atom(x) => match x {
                             Atom::Nil => {
@@ -557,14 +555,17 @@ impl Parser {
                             }
                             _ => continue,
                         },
-                        x => parent.push(x),
+                        x => {
+                            child.push(x);
+                            println!("val: {:?}", child.len());
+                        }
                     }
                 }
                 if !self.expect(TokenType::RightBrace) {
                     return self.error("Expected } ");
                 };
                 self.advance();
-                return Ok(Tree::NonTerm(Op::Group, parent));
+                return Ok(Tree::NonTerm(Op::Group, child));
             }
             _ => {
                 if self.expect(TokenType::Eof) {
@@ -573,7 +574,9 @@ impl Parser {
                 let val = self.parse_expr(0)?;
                 if self.expect(TokenType::Semicolon) {
                     self.advance();
-                    return Ok(Tree::ExprStatment(Box::new(val)));
+                    let mut temp: Vec<Tree> = Vec::new();
+                    temp.push(val);
+                    return Ok(Tree::ExprStatment(temp));
                 }
                 return Ok(val);
             }
