@@ -1,6 +1,5 @@
 use miette::{Diagnostic, Error, Result, SourceSpan};
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::ops::Range;
 use std::str::Chars;
 

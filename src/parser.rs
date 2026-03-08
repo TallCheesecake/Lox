@@ -1,9 +1,7 @@
 //TODO: Parse expresion statments properly
 use crate::scanner::{self, Token, TokenType};
 use core::panic;
-use lexopt::Arg::Value;
 use miette::{Context, Diagnostic, Result, SourceSpan};
-use std::fmt::write;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -67,34 +65,6 @@ pub enum Atom {
     Error,
 }
 
-impl From<Op> for TokenType {
-    fn from(value: Op) -> Self {
-        match value {
-            Op::Minus => TokenType::Minus,
-            Op::Plus => TokenType::Plus,
-            Op::Star => TokenType::Star,
-            Op::BangEqual => TokenType::BangEqual,
-            Op::EqualEqual => TokenType::EqualEqual,
-            Op::LessEqual => TokenType::LessEqual,
-            Op::GreaterEqual => TokenType::GreaterEqual,
-            Op::Less => TokenType::Less,
-            Op::Greater => TokenType::Greater,
-            Op::Slash => TokenType::Slash,
-            Op::Bang => TokenType::Bang,
-            Op::And => TokenType::And,
-            Op::Or => TokenType::Or,
-            Op::For => TokenType::For,
-            Op::Class => TokenType::Class,
-            Op::Print => TokenType::Print,
-            Op::Return => TokenType::Return,
-            Op::Var => TokenType::Var,
-            Op::Else => TokenType::Else,
-            Op::While => TokenType::While,
-            Op::If => TokenType::If,
-            _ => unreachable!(),
-        }
-    }
-}
 impl Into<Op> for TokenType {
     fn into(self) -> Op {
         match self {
@@ -113,7 +83,6 @@ impl Into<Op> for TokenType {
             TokenType::LessEqual => Op::LessEqual,
             TokenType::And => Op::And,
             TokenType::Class => Op::Class,
-            // TokenType::Identifier=> Op::Class,
             TokenType::Or => Op::Or,
             TokenType::Print => Op::Print,
             TokenType::Return => Op::Return,
@@ -151,7 +120,6 @@ pub enum Op {
     Var,
     While,
     Group,
-    EOFGroup,
     Equal,
 }
 
@@ -162,23 +130,6 @@ pub struct Parser {
     pub pos: usize,
 }
 
-// impl Iterator for Tree {
-//     type Item = Tree;
-//     fn next(&mut self) -> Option<Self::Item> {
-//         match self {
-//             Tree::Nil => return None,
-//             Tree::ExprStatment(tree) => return tree.next(),
-//             Tree::Atom(_) => return None,
-//             Tree::NonTerm(_, tree) => {
-//                 for i in tree {
-//                     return i.next();
-//                 }
-//                 return None;
-//             }
-//             _ => unimplemented!(),
-//         };
-//     }
-// }
 impl Parser {
     pub fn new(input: String) -> Result<Parser, miette::Report> {
         let stream = scanner::collect(&input)?;
@@ -652,7 +603,6 @@ impl std::fmt::Display for Op {
                 Op::While => "while",
                 Op::Call => "call",
                 Op::Group => "group",
-                Op::EOFGroup => todo!(),
             }
         )
     }
