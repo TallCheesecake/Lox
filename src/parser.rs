@@ -3,6 +3,7 @@ use crate::scanner::{self, Token, TokenType};
 use core::panic;
 use lexopt::Arg::Value;
 use miette::{Context, Diagnostic, Result, SourceSpan};
+use std::fmt::write;
 use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -33,7 +34,7 @@ fn token_to_span(token: &Token) -> SourceSpan {
 pub enum Tree {
     Nil,
     ExprStatment(Vec<Tree>),
-    Var(String, Vec<Tree>),
+    Var(String, Rc<Tree>),
     Call {
         callee: Box<Tree>,
         arguments: Vec<Tree>,
@@ -150,6 +151,7 @@ pub enum Op {
     Var,
     While,
     Group,
+    EOFGroup,
     Equal,
 }
 
@@ -440,8 +442,7 @@ impl Parser {
                 };
                 let name = String::from(&self.input[iden.range.start..iden.range.end]);
                 self.advance();
-                let mut temp = Vec::new();
-                temp.push(val);
+                let temp = Rc::new(val);
                 Tree::Var(name, temp)
             }
 
@@ -651,6 +652,7 @@ impl std::fmt::Display for Op {
                 Op::While => "while",
                 Op::Call => "call",
                 Op::Group => "group",
+                Op::EOFGroup => todo!(),
             }
         )
     }
@@ -675,7 +677,12 @@ impl std::fmt::Display for Tree {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Tree::ExprStatment(op) => {
-                write!(f, "({})", op)
+                write!(f, "(")?;
+
+                for i in op {
+                    write!(f, ", {}", i)?
+                }
+                write!(f, ")")
             }
             Tree::Op(op) => {
                 write!(f, "{}", op)
@@ -709,7 +716,10 @@ impl std::fmt::Display for Tree {
             }
 
             Tree::Var(k, x) => {
-                write!(f, "Var:  K: {} V: {}", k, x)
+                write!(f, "(")?;
+                write!(f, "k: {}", k)?;
+                write!(f, "{:?}", x)?;
+                write!(f, ")")
             }
             _ => unimplemented!(),
         }

@@ -1,63 +1,85 @@
-use crate::parser::{self, Tree, *};
-use miette::highlighters::Highlighter;
-use std::{cell::RefCell, collections::HashMap, fs::exists, i32, rc::Rc};
+//NOTE: I wanted to do closure but this means that we
+//have to be able to look back in the tree/stack
+//this means some play on a ll with either Rc and refcell
+//or I cook it up with unsafe.
+//This sounds like it sucks and I will not be doing it NOW
+//it may in the future
+use crate::parser::{self, Tree};
+use std::{collections::HashMap, rc::Rc};
+
+#[derive(Debug)]
+pub struct Stack {
+    pub scope: Vec<Scope>,
+}
 #[derive(Debug)]
 pub struct Scope {
-    level: u32,
-    stack: Vec<RefCell<HashMap<u32, String>>>,
-}
-pub trait Visitor<T> {
-    fn visit_nonterm(&mut self, var: &[Tree]) -> Option<()>;
-    fn visit_var(&mut self, var: &[Tree]);
+    pub scope: HashMap<String, Rc<Tree>>,
 }
 
-impl Visitor<String> for Scope {
-    fn visit_nonterm(&mut self, var: &[Tree]) -> Option<()> {
-        for i in var {
-            match *i {
-                Tree::Nil => None,
-                Tree::NonTerm(_, ref trees) => self.visit_nonterm((trees).as_slice()),
-                Tree::Var(_, ref trees) => Some(self.visit_var(trees.as_slice())),
-                Tree::Atom(_) => None,
-                Tree::ExprStatment(ref tree) => self.visit_nonterm((tree).as_slice()),
-                _ => unimplemented!(),
-            };
-        }
-        None
-    }
+pub trait Visitor {
+    fn visit_stmnt(&mut self, var: &Tree);
+    fn visit_expr(&mut self, var: &Tree);
+    fn visit_var(&mut self, var: &Tree);
+}
 
-    fn visit_var(&mut self, var: &[Tree]) {
-        for i in var {
-            match *i {
-                Tree::Var(ref z, ref trees) => {
-                    for i in self.stack.as_slice() {
-                        i.borrow_mut().insert(self.level, String::from(z));
+//Eachtime we see a group we have to add a new scope
+//eachtime we see a var we have to add it to the
+//current scope
+//each time we leave a scope we pop it from the
+//stack
+impl Visitor for Stack {
+    fn visit_stmnt(&mut self, var: &Tree) {
+        match var {
+            Tree::Nil => todo!(),
+            Tree::Var(op, trees) => {
+                println!("trees: {:?}", trees);
+                println!("self: {:?}", self.scope);
+                self.scope
+                    .last_mut()
+                    .unwrap()
+                    .scope
+                    .insert(String::from(op), Rc::clone(trees));
+            }
+            Tree::Atom(atom) => {}
+            Tree::NonTerm(op, trees) => {
+                if *op == parser::Op::Group {
+                    self.scope.push(Scope::new());
+                    for i in trees {
+                        self.visit_stmnt(i);
                     }
-                    self.visit_nonterm(trees.as_slice());
+                    println!("old scope  {:?}", self.scope);
+                    self.scope.pop();
                 }
-                _ => unimplemented!(),
             }
+            Tree::Op(op) => todo!(),
+            _ => todo!(),
         }
+    }
+    fn visit_expr(&mut self, var: &Tree) {
+        todo!()
+    }
+    fn visit_var(&mut self, var: &Tree) {
+        todo!()
     }
 }
-//NEW THING: Visitor pattern
-static SCOPE: i32 = 0;
+
 impl Scope {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            level: 0,
-            stack: Vec::new(),
+            scope: HashMap::new(),
         }
     }
+    pub fn add_to_scope(&mut self, k: &str, v: Rc<Tree>) {
+        self.scope.insert(String::from(k), v);
+    }
+    pub fn resolve(&mut self, k: &str) -> bool {
+        self.scope.contains_key(k)
+    }
+}
 
-    fn check(&mut self, val: u32) -> bool {
-        for i in self.stack.as_slice() {
-            if i.borrow_mut().contains_key(&val) {
-                return true;
-            } else {
-                return false;
-            }
-        }
-        false
+impl Stack {
+    pub fn new() -> Self {
+        let mut temp = Vec::new();
+        Self { scope: temp }
     }
 }

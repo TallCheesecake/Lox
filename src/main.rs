@@ -1,4 +1,6 @@
 use std::{ffi::OsString, fs};
+
+use crate::analysis::Visitor;
 mod analysis;
 mod parser;
 mod scanner;
@@ -33,12 +35,18 @@ fn hello(args: Args) -> Result<(), miette::Report> {
     if args.file.is_some() {
         let contents = match fs::read_to_string(args.file.unwrap()) {
             Ok(r) => r,
-            Err(_) => return Err(miette::miette!("io error")),
+            Err(_) => return Err(miette::miette!("main io error")),
         };
         let mut parse = parser::Parser::new(contents)?;
-        for mut i in parse.parse_program()? {
-            println!("{}", i);
+        let mut scope = analysis::Stack::new();
+        let temp = parse.parse_program()?;
+        println!("____________");
+        println!("{:?}", temp);
+        println!("____________");
+        for i in temp {
+            scope.visit_stmnt(&i);
         }
+        println!("val {:?}", scope.scope);
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }

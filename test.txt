@@ -1,4 +1,10 @@
-var a = 3; 
-for (a; a <= 1; a = a + 1 ) 
-{1 + 1} 
-print "Hello World"; 
+{
+
+var x = 2;
+
+{
+var i = 2;
+}
+
+}
+
