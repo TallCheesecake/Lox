@@ -18,49 +18,43 @@ pub struct Scope {
 
 pub trait Visitor {
     fn visit_stmnt(&mut self, var: &Tree);
-    fn visit_expr(&mut self, var: &Tree);
-    fn visit_var(&mut self, var: &Tree);
 }
 
-//Eachtime we see a group we have to add a new scope
-//eachtime we see a var we have to add it to the
-//current scope
-//each time we leave a scope we pop it from the
-//stack
 impl Visitor for Stack {
     fn visit_stmnt(&mut self, var: &Tree) {
         match var {
             Tree::Nil => todo!(),
             Tree::Var(op, trees) => {
-                println!("trees: {:?}", trees);
-                println!("self: {:?}", self.scope);
+                // println!("V_SCOPES: {:?}", self.scope);
                 self.scope
                     .last_mut()
                     .unwrap()
                     .scope
                     .insert(String::from(op), Rc::clone(trees));
             }
-
             Tree::Atom(atom) => {}
+            Tree::Fun {
+                name,
+                parameters,
+                body,
+            } => {
+                // self.scope.push(Scope::new());
+                // println!("self: {:?}", self.scope);
+                self.visit_stmnt(body.as_ref());
+            }
             Tree::NonTerm(op, trees) => {
                 if *op == parser::Op::Group {
                     self.scope.push(Scope::new());
                     for i in trees {
                         self.visit_stmnt(i);
                     }
-                    println!("old scope  {:?}", self.scope);
+                    println!("NON TERM: {:?}", self.scope);
                     self.scope.pop();
                 }
             }
             Tree::Op(op) => todo!(),
             _ => todo!(),
         }
-    }
-    fn visit_expr(&mut self, var: &Tree) {
-        todo!()
-    }
-    fn visit_var(&mut self, var: &Tree) {
-        todo!()
     }
 }
 

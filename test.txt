@@ -1,12 +1,6 @@
-var i = 2;
-{
+var  i =1;
+fun hello() {
 
-var x = 2;
-
-{
-var i = 2;
+var s =1;
 }
-
-
-}
-
+var  k =1;

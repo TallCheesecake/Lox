@@ -43,9 +43,9 @@ pub enum Tree {
     NonTerm(Op, Vec<Tree>),
     Op(Op),
     Fun {
-        name: Box<Tree>,
+        name: Rc<Tree>,
         parameters: Vec<Tree>,
-        body: Box<Tree>,
+        body: Rc<Tree>,
     },
 }
 
@@ -413,9 +413,9 @@ impl Parser {
                 self.advance();
                 let block = self.parse_statment()?;
                 return Ok(Tree::Fun {
-                    name: Box::new(func_iden),
+                    name: Rc::new(func_iden),
                     parameters: temp,
-                    body: Box::new(block),
+                    body: Rc::new(block),
                 });
             }
 
