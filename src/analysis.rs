@@ -40,6 +40,7 @@ impl Visitor for Stack {
                     .scope
                     .insert(String::from(op), Rc::clone(trees));
             }
+
             Tree::Atom(atom) => {}
             Tree::NonTerm(op, trees) => {
                 if *op == parser::Op::Group {
@@ -79,7 +80,7 @@ impl Scope {
 
 impl Stack {
     pub fn new() -> Self {
-        let mut temp = Vec::new();
+        let mut temp = vec![Scope::new()];
         Self { scope: temp }
     }
 }
