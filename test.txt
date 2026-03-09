@@ -1,6 +1,1 @@
-var  i =1;
-fun hello() {
-
-var s =1;
-}
-var  k =1;
+hi();

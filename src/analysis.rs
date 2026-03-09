@@ -1,15 +1,29 @@
-//NOTE: I wanted to do closure but this means that we
-//have to be able to look back in the tree/stack
-//this means some play on a ll with either Rc and refcell
-//or I cook it up with unsafe.
-//This sounds like it sucks and I will not be doing it NOW
-//it may in the future
+use miette::NarratableReportHandler;
+
 use crate::parser::{self, Tree};
 use std::{collections::HashMap, rc::Rc};
 
 #[derive(Debug)]
 pub struct Stack {
     pub scope: Vec<Scope>,
+    pub flook: FLookup,
+}
+
+/*
+maybe we can try and convert all the funciton and funtion call nodes
+with a pointer to the  lookup table
+for the ssa we really only need to be able to check it somehting exists
+we dont need a bunch of data about the funciton parameters
+that all has  to be stored in the lookup table
+and then when we traverse the tree into ssa form
+when we find a function or a call we just to into the
+table, (maybe bit lookup? ) and from there we can pull the
+information out parsing it strait to IR.
+How to actuall yrepresent the SSA, i have litteraly no idea
+ * */
+#[derive(Debug)]
+pub struct FLookup {
+    pub table: HashMap<Rc<Tree>, Rc<Tree>>,
 }
 #[derive(Debug)]
 pub struct Scope {
@@ -19,13 +33,11 @@ pub struct Scope {
 pub trait Visitor {
     fn visit_stmnt(&mut self, var: &Tree);
 }
-
 impl Visitor for Stack {
     fn visit_stmnt(&mut self, var: &Tree) {
         match var {
             Tree::Nil => todo!(),
             Tree::Var(op, trees) => {
-                // println!("V_SCOPES: {:?}", self.scope);
                 self.scope
                     .last_mut()
                     .unwrap()
@@ -33,13 +45,17 @@ impl Visitor for Stack {
                     .insert(String::from(op), Rc::clone(trees));
             }
             Tree::Atom(atom) => {}
+            Tree::Call { callee, arguments } => {
+                let call = Rc::clone(callee);
+                let table = self.flook.table;
+            }
             Tree::Fun {
                 name,
                 parameters,
                 body,
             } => {
-                // self.scope.push(Scope::new());
-                // println!("self: {:?}", self.scope);
+                //TODO: Put into func call look up table
+                self.flook.table.insert(name, body);
                 self.visit_stmnt(body.as_ref());
             }
             Tree::NonTerm(op, trees) => {
@@ -48,12 +64,17 @@ impl Visitor for Stack {
                     for i in trees {
                         self.visit_stmnt(i);
                     }
-                    println!("NON TERM: {:?}", self.scope);
                     self.scope.pop();
                 }
             }
-            Tree::Op(op) => todo!(),
-            _ => todo!(),
+            Tree::Op(_) => {}
+            Tree::ExprStatment(x) => {
+                self.scope.push(Scope::new());
+                for i in x {
+                    self.visit_stmnt(i);
+                }
+                self.scope.pop();
+            }
         }
     }
 }
@@ -64,17 +85,19 @@ impl Scope {
             scope: HashMap::new(),
         }
     }
-    pub fn add_to_scope(&mut self, k: &str, v: Rc<Tree>) {
-        self.scope.insert(String::from(k), v);
-    }
-    pub fn resolve(&mut self, k: &str) -> bool {
-        self.scope.contains_key(k)
-    }
 }
 
 impl Stack {
     pub fn new() -> Self {
-        let mut temp = vec![Scope::new()];
-        Self { scope: temp }
+        let scope = vec![Scope::new()];
+        let flook = FLookup::new();
+        Self { scope, flook }
+    }
+}
+
+impl FLookup {
+    pub fn new() -> Self {
+        let table = HashMap::new();
+        Self { table: table }
     }
 }

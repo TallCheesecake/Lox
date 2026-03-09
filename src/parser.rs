@@ -34,7 +34,7 @@ pub enum Tree {
     ExprStatment(Vec<Tree>),
     Var(String, Rc<Tree>),
     Call {
-        callee: Box<Tree>,
+        callee: Rc<Tree>,
         arguments: Vec<Tree>,
     },
     Atom(Atom),
@@ -68,9 +68,10 @@ pub enum Atom {
 impl Into<Op> for TokenType {
     fn into(self) -> Op {
         match self {
-            TokenType::LeftParen => Op::Group,
+            TokenType::LeftBrace => Op::Group,
             TokenType::Minus => Op::Minus,
             TokenType::Plus => Op::Plus,
+            TokenType::LeftParen => Op::Call,
             TokenType::Slash => Op::Slash,
             TokenType::Star => Op::Star,
             TokenType::Bang => Op::Bang,
@@ -208,8 +209,8 @@ impl Parser {
                 };
                 Tree::NonTerm(Op::Group, vec![lhs])
             }
-
             _ => {
+                println!("{:?}", self.peek());
                 return self.error("Expected expresion");
             }
         };
@@ -254,15 +255,41 @@ impl Parser {
                     break;
                 }
                 self.advance();
-                lhs = if op.kind == TokenType::LeftHardBrace {
-                    let rhs = self.parse_expr(0)?;
-                    Tree::NonTerm(op.kind.into(), vec![lhs, rhs])
+                lhs = if op.kind == TokenType::LeftParen {
+                    // let rhs = self.parse_expr(0)?;
+                    let rhs = if self.expect(TokenType::RightParen) {
+                        vec![Tree::Nil]
+                    } else {
+                        let mut temp = Vec::new();
+                        loop {
+                            if self.expect(TokenType::RightParen) {
+                                break vec![Tree::Nil];
+                            }
+                            println!("here");
+                            let range = self.current().range;
+                            let attempt: Tree = self.parse_expr(0).unwrap_or_else(|_| {
+                                self.advance();
+                                Tree::Atom(Atom::Ident {
+                                    range,
+                                    source: Arc::clone(&self.input),
+                                })
+                            });
+                            if self.expect(TokenType::Comma) {
+                                self.advance();
+                            }
+                            temp.push(attempt);
+                        }
+                    };
+                    self.advance();
+                    Tree::Call {
+                        callee: Rc::new(lhs),
+                        arguments: rhs,
+                    }
                 } else {
                     Tree::NonTerm(op.kind.into(), vec![lhs])
                 };
                 continue;
             }
-
             //INFIX
             if let Some((l_bp, r_bp)) = infix_binding_power(op.kind) {
                 if l_bp < min_bp {
@@ -396,7 +423,6 @@ impl Parser {
                 let temp = Rc::new(val);
                 Tree::Var(name, temp)
             }
-
             Token {
                 kind: TokenType::Else,
                 ..

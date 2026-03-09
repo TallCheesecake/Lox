@@ -43,10 +43,10 @@ fn hello(args: Args) -> Result<(), miette::Report> {
         println!("____________");
         println!("{:?}", temp);
         println!("____________");
-        for i in temp {
-            scope.visit_stmnt(&i);
-        }
-        println!("val {:?}", scope.scope);
+        // for i in temp {
+        //     scope.visit_stmnt(&i);
+        // }
+        // println!("val {:?}", scope.scope);
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }
