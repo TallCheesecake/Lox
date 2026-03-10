@@ -42,7 +42,7 @@ pub enum Tree {
     Op(Op),
     Fun {
         name: Rc<Tree>,
-        parameters: Vec<Tree>,
+        parameters: Vec<Rc<Tree>>,
         body: Rc<Tree>,
     },
 }
@@ -258,12 +258,12 @@ impl Parser {
                 lhs = if op.kind == TokenType::LeftParen {
                     // let rhs = self.parse_expr(0)?;
                     let rhs = if self.expect(TokenType::RightParen) {
-                        vec![Tree::Nil]
+                        vec![]
                     } else {
                         let mut temp = Vec::new();
                         loop {
                             if self.expect(TokenType::RightParen) {
-                                break vec![Tree::Nil];
+                                break vec![];
                             }
                             println!("here");
                             let range = self.current().range;
@@ -383,7 +383,7 @@ impl Parser {
                             source: Arc::clone(&self.input),
                         })
                     });
-                    temp.push(attempt);
+                    temp.push(Rc::new(attempt));
                 }
                 if !self.expect(TokenType::RightParen) {
                     return self.error("Expected )");

@@ -341,6 +341,13 @@ pub fn collect(input: &str) -> Result<Vec<Token>, miette::Report> {
         let token = res?;
         tokens.push(token);
     }
+    if input.len() == 0 {
+        tokens.push(Token {
+            kind: TokenType::Eof,
+            range: Range { start: 0, end: 0 },
+        });
+        return Ok(tokens);
+    }
     tokens.push(Token {
         kind: TokenType::Eof,
         range: Range {

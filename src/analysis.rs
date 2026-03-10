@@ -1,80 +1,137 @@
-use miette::NarratableReportHandler;
-
 use crate::parser::{self, Tree};
 use std::{collections::HashMap, rc::Rc};
-
 #[derive(Debug)]
-pub struct Stack {
-    pub scope: Vec<Scope>,
-    pub flook: FLookup,
+pub struct Resolver {
+    pub current_id: usize,
+    //Var scopes
+    pub vscope: Vec<Scope>,
+    //Funcitons as declared in global scope
+    pub fscope: Vec<FunctionInfo>,
+    //Funcitons calls
+    pub table: HashMap<String, usize>,
 }
 
-/*
-maybe we can try and convert all the funciton and funtion call nodes
-with a pointer to the  lookup table
-for the ssa we really only need to be able to check it somehting exists
-we dont need a bunch of data about the funciton parameters
-that all has  to be stored in the lookup table
-and then when we traverse the tree into ssa form
-when we find a function or a call we just to into the
-table, (maybe bit lookup? ) and from there we can pull the
-information out parsing it strait to IR.
-How to actuall yrepresent the SSA, i have litteraly no idea
- * */
 #[derive(Debug)]
-pub struct FLookup {
-    pub table: HashMap<Rc<Tree>, Rc<Tree>>,
+pub struct FunctionInfo {
+    pub airity: usize,
+    pub body: Rc<Tree>,
 }
 #[derive(Debug)]
 pub struct Scope {
-    pub scope: HashMap<String, Rc<Tree>>,
+    pub vlookup: HashMap<String, Rc<Tree>>,
 }
 
 pub trait Visitor {
-    fn visit_stmnt(&mut self, var: &Tree);
+    fn visit_first(&mut self, var: &Tree);
+    fn visit_second(&mut self, var: &Tree);
 }
-impl Visitor for Stack {
-    fn visit_stmnt(&mut self, var: &Tree) {
+
+impl Visitor for Resolver {
+    fn visit_first(&mut self, var: &Tree) {
         match var {
-            Tree::Nil => todo!(),
-            Tree::Var(op, trees) => {
-                self.scope
-                    .last_mut()
-                    .unwrap()
-                    .scope
-                    .insert(String::from(op), Rc::clone(trees));
-            }
-            Tree::Atom(atom) => {}
-            Tree::Call { callee, arguments } => {
-                let call = Rc::clone(callee);
-                let table = self.flook.table;
-            }
             Tree::Fun {
                 name,
                 parameters,
                 body,
             } => {
-                //TODO: Put into func call look up table
-                self.flook.table.insert(name, body);
-                self.visit_stmnt(body.as_ref());
+                //This currently does not support closures :)
+                let val = FunctionInfo {
+                    airity: parameters.len(),
+                    body: Rc::clone(body),
+                };
+                let out = match &**name {
+                    Tree::Atom(atom) => atom,
+                    _ => unreachable!(),
+                };
+                let name = match out {
+                    parser::Atom::Ident { range, source } => {
+                        let val = &(*source).as_str()[range.start..range.end];
+                        String::from(val)
+                    }
+                    _ => unreachable!(),
+                };
+                self.current_id += 1;
+                //add name of fun and order it was declared
+                self.table.insert(name, self.current_id);
+                //PUSH ONTO STACK
+                self.fscope.push(val);
             }
+            x => {}
+        }
+    }
+    fn visit_second(&mut self, var: &Tree) {
+        match var {
+            Tree::Nil => todo!(),
+            Tree::ExprStatment(trees) => {
+                self.vscope.push(Scope::new());
+                for i in trees {
+                    self.visit_second(i);
+                }
+                self.vscope.pop();
+            }
+            Tree::Var(op, trees) => {
+                self.vscope
+                    .last_mut()
+                    .unwrap()
+                    .vlookup
+                    .insert(String::from(op), Rc::clone(trees));
+            }
+            Tree::Call { callee, arguments } => {
+                println!("THE CALL IS: call: {callee:?} args: {arguments:?}");
+                let out = match &**callee {
+                    Tree::Atom(atom) => atom,
+                    _ => unreachable!(),
+                };
+                let name = match out {
+                    parser::Atom::Ident { range, source } => {
+                        let val = &(*source).as_str()[range.start..range.end];
+                        String::from(val)
+                    }
+                    _ => unreachable!(),
+                };
+
+                let len = arguments.len();
+                println!("found args; {:?}", arguments);
+
+                match self.table.get(&name) {
+                    Some(x) => {
+                        let function = self.fscope.get(*x).unwrap();
+                        if len == function.airity {
+                            println!("FUNCTION LEN: {} AIR {}", len, function.airity);
+                            println!("FUNCTION: {} IS FULLY QUALIFIED", name);
+                            {}
+                        } else {
+                            panic!("func wrong num args")
+                        }
+                    }
+                    None => {
+                        println!("func: {} not in scope", name)
+                    }
+                }
+            }
+            Tree::Atom(_) => {}
             Tree::NonTerm(op, trees) => {
                 if *op == parser::Op::Group {
-                    self.scope.push(Scope::new());
+                    self.vscope.push(Scope::new());
                     for i in trees {
-                        self.visit_stmnt(i);
+                        self.visit_second(i);
                     }
-                    self.scope.pop();
+                    println!("before we pop: {:?}", self.vscope);
+                    self.vscope.pop();
                 }
+                println!("non term scope: {:?}", self.vscope);
             }
             Tree::Op(_) => {}
-            Tree::ExprStatment(x) => {
-                self.scope.push(Scope::new());
-                for i in x {
-                    self.visit_stmnt(i);
-                }
-                self.scope.pop();
-            }
+            _ => {}
+        }
+    }
+}
+
+impl FunctionInfo {
+    pub fn new() -> Self {
+        Self {
+            airity: 0,
+            body: Rc::new(Tree::Nil),
         }
     }
 }
@@ -82,22 +139,24 @@ impl Visitor for Stack {
 impl Scope {
     pub fn new() -> Self {
         Self {
-            scope: HashMap::new(),
+            vlookup: HashMap::new(),
         }
     }
 }
-
-impl Stack {
+impl Resolver {
     pub fn new() -> Self {
-        let scope = vec![Scope::new()];
-        let flook = FLookup::new();
-        Self { scope, flook }
+        Self {
+            vscope: vec![Scope::new()],
+            fscope: vec![FunctionInfo::new()],
+            table: HashMap::new(),
+            current_id: 0,
+        }
     }
-}
-
-impl FLookup {
-    pub fn new() -> Self {
-        let table = HashMap::new();
-        Self { table: table }
+    pub fn resolve(&mut self, input: Vec<Tree>) {
+        println!("MASTER INPUT : {input:?}");
+        for i in input {
+            self.visit_first(&i);
+            self.visit_second(&i);
+        }
     }
 }

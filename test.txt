@@ -1,1 +1,2 @@
-hi();
+fun hello(f) { }
+hello(h, f);
