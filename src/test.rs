@@ -1,17 +1,16 @@
 use super::*;
 
 #[test]
+#[ignore = "not ready"]
+fn function1() -> Result<(), Box<dyn std::error::Error>> {
+    let mut parse = parser::Parser::new(String::from(" fun foo(a, s) {} foo(d, d); "))?;
+    let output = parse.parse_program()?;
+    insta::assert_debug_snapshot!(output);
+    Ok(())
+}
+#[test]
 fn group_group() -> Result<(), Box<dyn std::error::Error>> {
-    let mut parse = parser::Parser::new(String::from(
-        "
-    {
-    var i =1;
-    }
-{{
-    1 + 1
-}}
-            ",
-    ))?;
+    let mut parse = parser::Parser::new(String::from(" { var i =1; } {{ 1 + 1 }} "))?;
     let output = parse.parse_program()?;
     insta::assert_debug_snapshot!(output);
     Ok(())

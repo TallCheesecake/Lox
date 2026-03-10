@@ -4,16 +4,18 @@ expression: output
 ---
 [
     ExprStatment(
-        NonTerm(
-            Print,
-            [
-                Atom(
-                    String {
-                        range: 6..13,
-                        source: "print \"hello\";",
-                    },
-                ),
-            ],
-        ),
+        [
+            NonTerm(
+                Print,
+                [
+                    Atom(
+                        String {
+                            range: 6..13,
+                            source: "print \"hello\";",
+                        },
+                    ),
+                ],
+            ),
+        ],
     ),
 ]

@@ -1,2 +1,1 @@
-fun hello(f) { }
-hello(h, f);
+a = 1;

@@ -26,21 +26,23 @@ expression: output
                 Group,
                 [
                     ExprStatment(
-                        NonTerm(
-                            Plus,
-                            [
-                                Atom(
-                                    Number(
-                                        1.0,
+                        [
+                            NonTerm(
+                                Plus,
+                                [
+                                    Atom(
+                                        Number(
+                                            1.0,
+                                        ),
                                     ),
-                                ),
-                                Atom(
-                                    Number(
-                                        2.0,
+                                    Atom(
+                                        Number(
+                                            2.0,
+                                        ),
                                     ),
-                                ),
-                            ],
-                        ),
+                                ],
+                            ),
+                        ],
                     ),
                     NonTerm(
                         Group,

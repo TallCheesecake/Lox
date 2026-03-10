@@ -37,12 +37,8 @@ fn hello(args: Args) -> Result<(), miette::Report> {
             Ok(r) => r,
             Err(_) => return Err(miette::miette!("main io error")),
         };
-        let mut parse = parser::Parser::new(contents)?;
-        let mut scope = analysis::Resolver::new();
-        scope.resolve(parse.parse_program()?);
-        println!("vscope: {:?}", scope.vscope);
-        println!("fscope: {:?}", scope.fscope);
-        println!("table: {:?}", scope.table);
+        let mut scope = analysis::Resolver::new(parser::Parser::new(contents)?);
+        scope.resolve()?;
     } else {
         eprintln!("Must Provide a pos argument: rlox PATH_TO_FILE");
     }

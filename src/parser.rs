@@ -21,7 +21,7 @@ impl std::fmt::Display for ParserError {
         write!(f, "invalid or missing token")
     }
 }
-fn token_to_span(token: &Token) -> SourceSpan {
+pub fn token_to_span(token: &Token) -> SourceSpan {
     SourceSpan::new(
         token.range.start.into(),
         (token.range.end - token.range.start).into(),
@@ -134,7 +134,6 @@ pub struct Parser {
 impl Parser {
     pub fn new(input: String) -> Result<Parser, miette::Report> {
         let stream = scanner::collect(&input)?;
-
         Ok(Parser {
             stream,
             input: Arc::new(input),
@@ -256,16 +255,14 @@ impl Parser {
                 }
                 self.advance();
                 lhs = if op.kind == TokenType::LeftParen {
-                    // let rhs = self.parse_expr(0)?;
+                    let mut temp = Vec::new();
                     let rhs = if self.expect(TokenType::RightParen) {
-                        vec![]
+                        temp
                     } else {
-                        let mut temp = Vec::new();
                         loop {
                             if self.expect(TokenType::RightParen) {
-                                break vec![];
+                                break temp;
                             }
-                            println!("here");
                             let range = self.current().range;
                             let attempt: Tree = self.parse_expr(0).unwrap_or_else(|_| {
                                 self.advance();
@@ -277,6 +274,7 @@ impl Parser {
                             if self.expect(TokenType::Comma) {
                                 self.advance();
                             }
+                            println!("pushed: {}", attempt);
                             temp.push(attempt);
                         }
                     };
@@ -535,7 +533,6 @@ impl Parser {
                         },
                         x => {
                             child.push(x);
-                            println!("val: {:?}", child.len());
                         }
                     }
                 }

@@ -15,30 +15,34 @@ expression: output
         For,
         [
             ExprStatment(
-                Atom(
-                    Ident {
-                        range: 17..18,
-                        source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
-                    },
-                ),
+                [
+                    Atom(
+                        Ident {
+                            range: 17..18,
+                            source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                        },
+                    ),
+                ],
             ),
             ExprStatment(
-                NonTerm(
-                    LessEqual,
-                    [
-                        Atom(
-                            Ident {
-                                range: 20..21,
-                                source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
-                            },
-                        ),
-                        Atom(
-                            Number(
-                                1.0,
+                [
+                    NonTerm(
+                        LessEqual,
+                        [
+                            Atom(
+                                Ident {
+                                    range: 20..21,
+                                    source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                                },
                             ),
-                        ),
-                    ],
-                ),
+                            Atom(
+                                Number(
+                                    1.0,
+                                ),
+                            ),
+                        ],
+                    ),
+                ],
             ),
             NonTerm(
                 Equal,
@@ -90,16 +94,18 @@ expression: output
         ],
     ),
     ExprStatment(
-        NonTerm(
-            Print,
-            [
-                Atom(
-                    String {
-                        range: 54..67,
-                        source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
-                    },
-                ),
-            ],
-        ),
+        [
+            NonTerm(
+                Print,
+                [
+                    Atom(
+                        String {
+                            range: 54..67,
+                            source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                        },
+                    ),
+                ],
+            ),
+        ],
     ),
 ]
