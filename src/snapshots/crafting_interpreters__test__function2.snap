@@ -1,0 +1,149 @@
+---
+source: src/test.rs
+expression: output
+---
+[
+    Fun {
+        name: Atom(
+            Ident {
+                range: 6..9,
+                source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+            },
+        ),
+        parameters: [
+            Atom(
+                Ident {
+                    range: 10..11,
+                    source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                },
+            ),
+            Atom(
+                Ident {
+                    range: 13..14,
+                    source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                },
+            ),
+        ],
+        body: NonTerm(
+            Group,
+            [
+                NonTerm(
+                    For,
+                    [
+                        Atom(
+                            Ident {
+                                range: 23..24,
+                                source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                            },
+                        ),
+                        NonTerm(
+                            Less,
+                            [
+                                Atom(
+                                    Ident {
+                                        range: 26..27,
+                                        source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                                    },
+                                ),
+                                Atom(
+                                    Number(
+                                        2.0,
+                                    ),
+                                ),
+                            ],
+                        ),
+                        NonTerm(
+                            Equal,
+                            [
+                                Atom(
+                                    Ident {
+                                        range: 31..32,
+                                        source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                                    },
+                                ),
+                                NonTerm(
+                                    Plus,
+                                    [
+                                        Atom(
+                                            Ident {
+                                                range: 35..36,
+                                                source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                                            },
+                                        ),
+                                        Atom(
+                                            Number(
+                                                1.0,
+                                            ),
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                        NonTerm(
+                            Group,
+                            [
+                                ExprStatment(
+                                    [
+                                        NonTerm(
+                                            Print,
+                                            [
+                                                Atom(
+                                                    Ident {
+                                                        range: 50..51,
+                                                        source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                                                    },
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+        ),
+    },
+    Var(
+        "d",
+        Atom(
+            Number(
+                1.0,
+            ),
+        ),
+    ),
+    Var(
+        "x",
+        Atom(
+            Number(
+                1.0,
+            ),
+        ),
+    ),
+    ExprStatment(
+        [
+            Call {
+                callee: Atom(
+                    Ident {
+                        range: 81..84,
+                        source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                    },
+                ),
+                arguments: [
+                    Atom(
+                        Ident {
+                            range: 85..86,
+                            source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                        },
+                    ),
+                    Atom(
+                        Ident {
+                            range: 88..89,
+                            source: " \nfun foo(a, s) \n{\nfor(a; a<2; a = a + 1) {\nprint s;\n}\n} \nvar d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                        },
+                    ),
+                ],
+            },
+        ],
+    ),
+]

@@ -1,9 +1,35 @@
 use super::*;
 
 #[test]
-#[ignore = "not ready"]
+fn function2() -> Result<(), Box<dyn std::error::Error>> {
+    let mut parse = parser::Parser::new(String::from(
+        " 
+fun foo(a, s) 
+{
+for(a; a<2; a = a + 1) {
+print s;
+}
+} 
+var d = 1;
+var x = 1; 
+foo(d, x);
+",
+    ))?;
+    let output = parse.parse_program()?;
+    insta::assert_debug_snapshot!(output);
+    Ok(())
+}
+#[test]
 fn function1() -> Result<(), Box<dyn std::error::Error>> {
-    let mut parse = parser::Parser::new(String::from(" fun foo(a, s) {} foo(d, d); "))?;
+    let mut parse = parser::Parser::new(String::from(
+        " 
+fun foo(a, s) 
+{} 
+ var d = 1;
+var x = 1; 
+foo(d, x);
+",
+    ))?;
     let output = parse.parse_program()?;
     insta::assert_debug_snapshot!(output);
     Ok(())

@@ -1,6 +1,5 @@
-use std::{ffi::OsString, fs};
-
 use crate::analysis::Visitor;
+use std::{ffi::OsString, fs};
 mod analysis;
 mod parser;
 mod scanner;

@@ -196,6 +196,7 @@ impl Parser {
             } => {
                 let ((), bp) = prefix_binding_power(n.kind);
                 let rhs = self.parse_expr(bp)?;
+                println!("{}", rhs);
                 Tree::NonTerm(n.kind.into(), vec![rhs])
             }
             Token {
@@ -288,7 +289,6 @@ impl Parser {
                 };
                 continue;
             }
-            //INFIX
             if let Some((l_bp, r_bp)) = infix_binding_power(op.kind) {
                 if l_bp < min_bp {
                     break;
@@ -436,9 +436,8 @@ impl Parser {
             } => {
                 self.advance();
                 if !self.expect(TokenType::Identifier) {
-                    return self.error("Expected ;");
+                    return self.error("Expected name of class");
                 };
-
                 self.advance();
                 let cls_name = Tree::Atom(Atom::Ident {
                     range: Range {
@@ -447,9 +446,8 @@ impl Parser {
                     },
                     source: Arc::clone(&self.input),
                 });
-
                 if !self.expect(TokenType::LeftBrace) {
-                    return self.error("Expected ;");
+                    return self.error("Expected body");
                 };
 
                 let inside = self.parse_statment()?;
@@ -463,9 +461,17 @@ impl Parser {
                 self.advance();
                 if self.expect(TokenType::LeftParen) {
                     self.advance();
-                    let var = self.parse_statment()?;
-                    let cond = self.parse_statment()?;
-                    let inc = self.parse_statment()?;
+                    let var = self.parse_expr(0)?;
+                    if !self.expect(TokenType::Semicolon) {
+                        return self.error("Expected a ;");
+                    }
+                    self.advance();
+                    let cond = self.parse_expr(0)?;
+                    if !self.expect(TokenType::Semicolon) {
+                        return self.error("Expected a ;");
+                    }
+                    self.advance();
+                    let inc = self.parse_expr(0)?;
                     if !self.expect(TokenType::RightParen) {
                         return self.error("Expected a )");
                     };
@@ -485,7 +491,7 @@ impl Parser {
                     return self.error("Expected a (");
                 };
                 self.advance();
-                let cond = self.parse_statment()?;
+                let cond = self.parse_expr(0)?;
                 if !self.expect(TokenType::RightParen) {
                     return self.error("Expected a )");
                 };
@@ -635,7 +641,9 @@ impl std::fmt::Display for Atom {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Atom::Ident { range, source } => write!(f, "{}", &source[range.start..range.end]),
-            Atom::String { range, source } => write!(f, "{}", &source[range.start..range.end]),
+            Atom::String { range, source } => {
+                write!(f, "{}", &source[range.start..range.end])
+            }
             Atom::Number(x) => write!(f, "{x}"),
             Atom::Nil => write!(f, "Nil"),
             Atom::Bool(x) => write!(f, "{x}"),

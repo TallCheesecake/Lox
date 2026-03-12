@@ -14,33 +14,25 @@ expression: output
     NonTerm(
         For,
         [
-            ExprStatment(
+            Atom(
+                Ident {
+                    range: 17..18,
+                    source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
+                },
+            ),
+            NonTerm(
+                LessEqual,
                 [
                     Atom(
                         Ident {
-                            range: 17..18,
+                            range: 20..21,
                             source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
                         },
                     ),
-                ],
-            ),
-            ExprStatment(
-                [
-                    NonTerm(
-                        LessEqual,
-                        [
-                            Atom(
-                                Ident {
-                                    range: 20..21,
-                                    source: " var a = 3; for (a; a <= 1; a = a + 1 ) {1 + 1} print \"Hello World\"; ",
-                                },
-                            ),
-                            Atom(
-                                Number(
-                                    1.0,
-                                ),
-                            ),
-                        ],
+                    Atom(
+                        Number(
+                            1.0,
+                        ),
                     ),
                 ],
             ),

@@ -1,0 +1,74 @@
+---
+source: src/test.rs
+expression: output
+---
+[
+    Fun {
+        name: Atom(
+            Ident {
+                range: 6..9,
+                source: " \nfun foo(a, s) \n{} \n var d = 1;\nvar x = 1; \nfoo(d, x);\n",
+            },
+        ),
+        parameters: [
+            Atom(
+                Ident {
+                    range: 10..11,
+                    source: " \nfun foo(a, s) \n{} \n var d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                },
+            ),
+            Atom(
+                Ident {
+                    range: 13..14,
+                    source: " \nfun foo(a, s) \n{} \n var d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                },
+            ),
+        ],
+        body: NonTerm(
+            Group,
+            [],
+        ),
+    },
+    Var(
+        "d",
+        Atom(
+            Number(
+                1.0,
+            ),
+        ),
+    ),
+    Var(
+        "x",
+        Atom(
+            Number(
+                1.0,
+            ),
+        ),
+    ),
+    ExprStatment(
+        [
+            Call {
+                callee: Atom(
+                    Ident {
+                        range: 45..48,
+                        source: " \nfun foo(a, s) \n{} \n var d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                    },
+                ),
+                arguments: [
+                    Atom(
+                        Ident {
+                            range: 49..50,
+                            source: " \nfun foo(a, s) \n{} \n var d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                        },
+                    ),
+                    Atom(
+                        Ident {
+                            range: 52..53,
+                            source: " \nfun foo(a, s) \n{} \n var d = 1;\nvar x = 1; \nfoo(d, x);\n",
+                        },
+                    ),
+                ],
+            },
+        ],
+    ),
+]
